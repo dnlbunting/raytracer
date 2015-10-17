@@ -74,7 +74,7 @@ class Spherical(OpticalElement):
                     
             T = np.linspace(self.t_0-self.theta, self.t_0+self.theta, 100)
             points = [[self.r*np.cos(t)+self.centre[0], self.r*np.sin(t)+self.centre[1]] for t in T]
-            poly = Polygon(points, True, facecolor = 'none')
+            poly = Polygon(points, False, facecolor = 'none')
             ax.add_patch(poly)
         
         # TODO Make it so that the spherical can have a z comp
@@ -116,23 +116,29 @@ class Spherical(OpticalElement):
     def distance(self, ray):
         r = ray.p - self.centre
         
+        # If the sqrt is imaginary it never intersects
         sq = np.dot(r, ray.k)**2 - (np.linalg.norm(r)**2 - self.r**2)
         if sq >= 0 :
             l1 = -np.dot(r, ray.k) + np.sqrt(sq)
             l2 = -np.dot(r, ray.k) - np.sqrt(sq)
         else:
             return float('inf')
-
-        d = np.min([l1,l2])        
-        p = ray.p + d*ray.k
-        d = d if self.isIntersect(p) else float('inf')
-        return d
+        
+        # Try the closest intersection first
+        d = sorted([l1,l2]) 
+        if d[0] > np.finfo(np.float64).eps and self.isIntersect(ray.p + d[0]*ray.k - self.centre):
+            return d[0] 
+        # Now try the further away one                
+        elif d[1] > np.finfo(np.float64).eps and self.isIntersect(ray.p + d[1]*ray.k - self.centre):
+            return d[1]        
+        else: 
+            return float('inf')
     
     def isIntersect(self,p):
         """docstring for isIntersect"""
         
-        ang = np.arctan2(p[1], p[0])
-        z_cond = np.logical_and(p[2] >= self.centre[2]-self.height, p[2] <= self.centre[2]+self.height)
+        ang = np.arccos(np.dot(p,self.R)/np.linalg.norm(p))
+        z_cond = np.abs(p[2]) <= self.height
         return np.logical_and(z_cond, np.abs(ang) <= self.theta)
 
 
@@ -158,16 +164,19 @@ class SphericalMirror(Spherical):
         """Implements propagate_ray for Wall by terminating ray"""
 
         d = self.distance(ray) 
-        p = ray.p + d*ray.k 
+        p = ray.p + d*ray.k  
         
         # Normal at the point of intersection
-        n = normalise(self.centre -  p)  
+        n = normalise(p - self.centre)  
         
         # Orthogonal to both k and n
         m = normalise(np.cross(n, np.cross(ray.k, n)))
         
+        
         # New wavevector
         k_prime = np.dot(ray.k, m)*m - np.dot(ray.k, n)*n
+         
+        #k_prime = ray.k - 2*np.dot(ray.k, n)*n        
            
         ray.append(p, k_prime)
         ray.isTerminated = False
