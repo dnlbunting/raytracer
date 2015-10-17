@@ -34,7 +34,7 @@ class OpticalElement(object):
     def drawBench(self, ax=None):
         if ax == None:
             fig = plt.figure()
-            ax = fig.add_axes([0.05,0.05, 0.9, 0.9])
+            ax = fig.add_axes([0.05,0.05, 0.9, 0.9], aspect='auto')
             ax.set_xlim(-2,2)
             ax.set_ylim(-2,2)
             
@@ -61,7 +61,6 @@ class Spherical(OpticalElement):
             self.height = self.r * np.sin(self.theta)
         else:
             self.height = self.r
-        print "Init end"
 
 
     def drawBench(self, ax=None):
@@ -121,7 +120,7 @@ class Spherical(OpticalElement):
         if sq >= 0 :
             l1 = -np.dot(r, ray.k) + np.sqrt(sq)
             l2 = -np.dot(r, ray.k) - np.sqrt(sq)
-        else :
+        else:
             return float('inf')
 
         d = np.min([l1,l2])        
@@ -134,8 +133,6 @@ class Spherical(OpticalElement):
         
         ang = np.arctan2(p[1], p[0])
         z_cond = np.logical_and(p[2] >= self.centre[2]-self.height, p[2] <= self.centre[2]+self.height)
-        
-        print z_cond
         return np.logical_and(z_cond, np.abs(ang) <= self.theta)
 
 
@@ -151,7 +148,30 @@ class SphericalWall(Spherical):
         ray.append(ray.p + d*ray.k, ray.k)
         ray.isTerminated = True
         return ray       
-   
+
+class SphericalMirror(Spherical):
+    """A totally reflective spherical (both sides)"""
+    def __init__(self, centre,  R, theta):
+        super(SphericalMirror, self).__init__( centre, R, theta)
+    
+    def propagate_ray(self, ray):
+        """Implements propagate_ray for Wall by terminating ray"""
+
+        d = self.distance(ray) 
+        p = ray.p + d*ray.k 
+        
+        # Normal at the point of intersection
+        n = normalise(self.centre -  p)  
+        
+        # Orthogonal to both k and n
+        m = normalise(np.cross(n, np.cross(ray.k, n)))
+        
+        # New wavevector
+        k_prime = np.dot(ray.k, m)*m - np.dot(ray.k, n)*n
+           
+        ray.append(p, k_prime)
+        ray.isTerminated = False
+        return ray    
 
 
 class Plane(OpticalElement):
@@ -245,12 +265,13 @@ class Screen(Plane):
         super(Screen, self).__init__(centre,  a, b)
         
         self.fig = plt.figure()
-        self.ax = self.fig.add_axes([0.05,0.05, 0.9, 0.9])
+        self.ax = self.fig.add_axes([0.05,0.05, 0.9, 0.9], aspect='auto')
         A = np.linalg.norm(self.a)
         B = np.linalg.norm(self.b)
         
         self.ax.set_xlim(-1*A, A)
         self.ax.set_ylim(-1*B, B)
+        self.ax.set_aspect('equal')
         
     
     def propagate_ray(self, ray):
