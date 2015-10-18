@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import matplotlib.pyplot as plt
 from .utils import isVector, normalise, unifDisk
+from . import n_air
 
 
 
@@ -75,6 +76,8 @@ class Ray(object):
         self.k = isVector(k)
         self.wavelength = wavelength
         self.isTerminated = False
+        self.n = n_air # Index of refraction of the medium currently in
+                   # TODO make less of hack
         
     
     @property
@@ -88,7 +91,7 @@ class Ray(object):
     @k.setter
     def k(self, new):
         self._k = normalise(new)
-        
+                        
     def drawBench(self, ax=None):
         """docstring for drawBench"""
         if ax == None:
