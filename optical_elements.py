@@ -232,17 +232,7 @@ class SphericalMirror(Spherical):
 
         d = self.distance(ray) 
         p = ray.p + d*ray.k  
-        
-        # Normal at the point of intersection
-        n = normalise(p - self.centre)  
-        
-        # Orthogonal to both k and n
-        m = normalise(np.cross(n, np.cross(ray.k, n)))
-        
-        
-        # New wavevector
-        #k_prime = np.dot(ray.k, m)*m - np.dot(ray.k, n)*n
-         
+                 
         k_prime = ray.k - 2*np.dot(ray.k, n)*n        
            
         ray.append(p, k_prime)
