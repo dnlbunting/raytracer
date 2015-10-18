@@ -32,3 +32,6 @@ def unifDisk(n, rmax, m):
     R = np.linspace(0, rmax, n)
     T = [i*m for i in range(n)]
     return rtpairs(R, T)
+
+def rotPlane(a,b,t):
+    return ([a*np.cos(t), a*np.sin(t),0], [0,0,b])
