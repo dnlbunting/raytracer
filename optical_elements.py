@@ -5,6 +5,9 @@ from .utils import isVector, normalise
 from matplotlib.patches import Polygon
 from scipy.spatial import ConvexHull
 from mpl_toolkits.mplot3d import Axes3D
+from . import n_air
+
+eps = np.finfo(np.float64).eps
 
 # TODO Add kwargs to draw that pass to Polygon to allow for more complex rendering ie colors for materials
 class OpticalElement(object):
@@ -41,6 +44,67 @@ class OpticalElement(object):
 
         return ax
 
+
+
+class Cube(OpticalElement):
+    """docstring for Cube"""
+    def __init__(self, centre,  a, b, c, n):
+        super(Cube, self).__init__(centre)
+        self.a = isVector(a)
+        self.b = isVector(b)
+        self.c = isVector(c)
+        
+        self.n = n
+        
+        self.side_centres = [self.centre + self.c,
+                              self.centre - self.c,
+                              self.centre + self.b,
+                              self.centre - self.b,
+                              self.centre + self.a,
+                              self.centre - self.a]
+        
+        self.sides = [PlaneInterface(self.side_centres[0],  self.a, self.b, self.n),
+                      PlaneInterface(self.side_centres[1],  -self.a, self.b, self.n),
+                      PlaneInterface(self.side_centres[2],  -self.a, self.c, self.n),
+                      PlaneInterface(self.side_centres[3],  self.a, self.c, self.n),
+                      PlaneInterface(self.side_centres[4],  self.b, self.c, self.n),
+                      PlaneInterface(self.side_centres[5],  -self.b, self.c, self.n)]
+    
+    def drawBench(self, ax=None):
+        """Draws a projection of the object on the xy plane"""
+        ax = super(Cube, self).drawBench(ax)
+        points = np.array([x[:2] for y in self.sides for x in y.points ])
+        hull = ConvexHull(points)
+        
+        for simplex in hull.simplices:
+         ax.plot(points[simplex,0], points[simplex,1], 'k-')
+
+    def distance(self, ray):
+        d = np.array([s.distance(ray) for s in self.sides])
+        
+        # Filter out negative distances but leave 0 distance
+        d[np.logical_or(np.isnan(d), d < 0)] = float('inf')
+        
+        self.entrance_idx = np.argmin(d) 
+        return d
+                
+    def propagate_ray(self, ray):  
+        # Propagates the ray into the block
+        ray = self.sides[self.entrance_idx].propagate_ray(ray)
+        
+        ## Decides which side it will exit through (can't be entrance side)
+        ## TODO this is where TIR could be incorporated
+        d = np.array([s.distance(ray) for s in self.sides])
+        d[np.logical_or(np.isnan(d), d <= 0+eps)] = float('inf')
+        self.exit_idx = np.argmin(d)
+        ray.append(ray.p + np.min(d)*ray.k, ray.k)
+        
+        return ray
+        
+    def exitToAir(self,ray):
+        """docstring for exitToAir"""
+        ray = self.sides[self.exit_idx].exitToAir(ray)
+        return ray
 class Spherical(OpticalElement):
     """docstring for Spherical"""
     
@@ -66,7 +130,7 @@ class Spherical(OpticalElement):
     def drawBench(self, ax=None):
         """docstring for drawBench"""
         ax = super(Spherical, self).drawBench(ax)
-
+        
         
         if self.R[2] == 0:
             # If the spherical isn't tilted in the z direction we can 
@@ -115,24 +179,27 @@ class Spherical(OpticalElement):
 
     def distance(self, ray):
         r = ray.p - self.centre
-        
+        # TODO Fix this to mach the new list return type
         # If the sqrt is imaginary it never intersects
         sq = np.dot(r, ray.k)**2 - (np.linalg.norm(r)**2 - self.r**2)
         if sq >= 0 :
             l1 = -np.dot(r, ray.k) + np.sqrt(sq)
             l2 = -np.dot(r, ray.k) - np.sqrt(sq)
         else:
-            return float('inf')
+            return [float('inf')]
         
         # Try the closest intersection first
         d = sorted([l1,l2]) 
-        if d[0] > np.finfo(np.float64).eps and self.isIntersect(ray.p + d[0]*ray.k - self.centre):
-            return d[0] 
+        
+        # Note using machine eps to to sqrts 
+        # this was a bug
+        if d[0] > eps and self.isIntersect(ray.p + d[0]*ray.k - self.centre):
+            return [d[0]] 
         # Now try the further away one                
-        elif d[1] > np.finfo(np.float64).eps and self.isIntersect(ray.p + d[1]*ray.k - self.centre):
-            return d[1]        
+        elif d[1] > eps and self.isIntersect(ray.p + d[1]*ray.k - self.centre):
+            return [d[1]]        
         else: 
-            return float('inf')
+            return [float('inf')]
     
     def isIntersect(self,p):
         """docstring for isIntersect"""
@@ -174,13 +241,15 @@ class SphericalMirror(Spherical):
         
         
         # New wavevector
-        k_prime = np.dot(ray.k, m)*m - np.dot(ray.k, n)*n
+        #k_prime = np.dot(ray.k, m)*m - np.dot(ray.k, n)*n
          
-        #k_prime = ray.k - 2*np.dot(ray.k, n)*n        
+        k_prime = ray.k - 2*np.dot(ray.k, n)*n        
            
         ray.append(p, k_prime)
         ray.isTerminated = False
         return ray    
+
+
 
 
 class Plane(OpticalElement):
@@ -220,11 +289,12 @@ class Plane(OpticalElement):
         """Distance from ray to self along the ray's path"""    
         
         r = self.centre - ray.p
-        d = np.dot(self.normal, r)/np.dot(ray.k, self.normal) if np.dot(self.normal, r) != 0 else float('inf')
+        d = np.dot(self.normal, r)/np.dot(ray.k, self.normal) #if np.dot(self.normal, r) != 0 else float('inf')
         
         p = ray.p + d*ray.k
         d = d if self.isIntersect(p) else float('inf')
-        return d
+        d = float('inf') if np.isnan(d) or d < 0 else d
+        return [d]
         
     def isIntersect(self, p):
         """Decides if p is in the plane or not by projecting the intersection point
@@ -244,13 +314,7 @@ class Mirror(Plane):
         """Implements propagate_ray for Mirror by reflecting the wavevector of the ray
             about the normal of the plane.
             """
-        
-        # Orthogonal to both k and n
-        m = normalise(np.cross(self.normal, np.cross(ray.k, self.normal)))
-        
-        # New wavevector
-        k_prime = np.dot(ray.k, m)*m - np.dot(ray.k, self.normal)*self.normal       
-        
+        k_prime = ray.k - 2*np.dot(ray.k, self.normal)*self.normal 
         d = self.distance(ray)
         ray.append(ray.p + d*ray.k, k_prime)        
         return ray
@@ -297,3 +361,41 @@ class Screen(Plane):
         self.ax.scatter(alpha, beta)
         return ray
         
+
+
+
+class PlaneInterface(Plane):
+    """docstring for PlaneInterface"""
+    def __init__(self, centre,  a, b,n2):
+        super(PlaneInterface, self).__init__(centre,  a, b)
+        self.n2 = n2
+     
+    def propagate_ray(self, ray):     
+        """Implements propagate_ray for Wall by terminating ray"""     
+        d = self.distance(ray)     
+             
+        r = ray.n/self.n2    
+        c = -np.dot(self.normal, ray.k) 
+        if 1-(r**2)*(1-c**2) < 0:
+            print("TOTAL INTERNAL REFLECTION")
+        k_prime = r*ray.k + (r*c - np.sqrt(1-(r**2)*(1-c**2)))*self.normal     
+        ray.append(ray.p + d*ray.k, k_prime)     
+        ray.isTerminated = False  
+        ray.n = self.n2   
+        return ray 
+    
+    def exitToAir(self, ray):     
+
+        d = self.distance(ray)     
+             
+        r = ray.n/n_air   
+        c = -np.dot(-1*self.normal, ray.k) 
+        if 1-(r**2)*(1-c**2) < 0:
+            print("TOTAL INTERNAL REFLECTION")
+        k_prime = r*ray.k + (r*c - np.sqrt(1-(r**2)*(1-c**2)))*-1*self.normal     
+        ray.append(ray.p + d*ray.k, k_prime)     
+        ray.isTerminated = False  
+        ray.n = n_air  
+        return ray        
+        
+
