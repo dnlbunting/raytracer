@@ -91,7 +91,7 @@ class Ray(object):
     @k.setter
     def k(self, new):
         self._k = normalise(new)
-                        
+        #print self._k              
     def drawBench(self, ax=None):
         """docstring for drawBench"""
         if ax == None:
