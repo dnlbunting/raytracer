@@ -44,10 +44,76 @@ class OpticalElement(object):
         return ax
 
 
+class CompositeObject(OpticalElement):
+    """docstring for CompositeObject"""
+    def __init__(self, centre):
+        super(CompositeObject, self).__init__(centre)
+        self.components = []
+    
+    def add(self, comp):
+        """Add a new component to the composite object"""
+        if not isinstance(comp, OpticalElement):
+            raise Exception("Component must be an optical element!")
+        
+        self.components.append(comp)
+    def distance(self, ray):
+        """Distance of the composite is the min distance of its components"""
+        d = np.array([s.distance(ray) for s in self.components])               
+        d[np.logical_or(np.isnan(d), d <= 0)] = float('inf')        
+        return np.min(d)
+
+    def propagate_ray(self, ray):
+        """Pass on propagate_ray to the component closest to the ray"""
+        d = np.array([s.distance(ray) for s in self.components])               
+        d[np.logical_or(np.isnan(d), d <= 0)] = float('inf')        
+        return self.components[np.argmin(d)].propagate_ray(ray)
+    
+    def drawBench(self, ax=None):
+        """docstring for drawBench"""
+        for s in self.components:
+            s.drawBench(ax)
+
+
+
+class PlanoConvex(CompositeObject):
+    """docstring for PlanoConvex"""
+    def __init__(self, centre, height, radius, thickness):
+        super(PlanoConvex, self).__init__(centre)
+        self.height = height
+        self.radius = radius
+        self.thickness = thickness 
+         
+
+class CubeComp(CompositeObject):
+    """docstring for CubeComp"""
+    def __init__(self, centre,  a, b, c, ref_index):
+        super(CubeComp, self).__init__(centre)
+        self.a = isVector(a)
+        self.b = isVector(b)
+        self.c = isVector(c)
+        
+        self.ref_index = ref_index        
+        
+        self.side_centres = [self.centre + self.c,
+                              self.centre - self.c,
+                              self.centre + self.b,
+                              self.centre - self.b,
+                              self.centre + self.a,
+                              self.centre - self.a]
+                              
+        sides = [PlaneRefraction(self.side_centres[0],  self.a, self.b, lambda x:n_air,self.ref_index),
+                      PlaneRefraction(self.side_centres[1],  -self.a, self.b,lambda x:n_air, self.ref_index),
+                      PlaneRefraction(self.side_centres[2],  -self.a, self.c,lambda x:n_air, self.ref_index),
+                      PlaneRefraction(self.side_centres[3],  self.a, self.c, lambda x:n_air,self.ref_index),
+                      PlaneRefraction(self.side_centres[4],  self.b, self.c, lambda x:n_air,self.ref_index),
+                      PlaneRefraction(self.side_centres[5],  -self.b, self.c,lambda x:n_air, self.ref_index)]
+        for s in sides:
+            self.add(s)
+                      
 class Spherical(OpticalElement):
     """docstring for Spherical"""
     
-    def __init__(self, centre, R, theta):
+    def __init__(self, centre, R, theta=None, height=None):
         super(Spherical, self).__init__(centre)
         
         # scalar radius
@@ -56,15 +122,20 @@ class Spherical(OpticalElement):
         self.R = normalise(R)    
         
         self.theta = theta
+        self.height = height
         self.t_0 = np.arctan2(self.R[1], self.R[0])
 
+        if (theta is None and height is None) or (theta is not None and height is not None):
+            raise Exception("Supply exactly one of theta or height")
+        elif theta is None:
+            self.theta = np.arcsin(self.height/self.r)
+        elif height is None:
+            if self.theta < 0.5*np.pi:
+                self.height = self.r * np.sin(self.theta)
+            else:
+                self.height = self.r
         assert np.logical_and( self.theta > 0, theta <= np.pi ), "0 < theta <= pi"
         
-        if self.theta < 0.5*np.pi:
-            self.height = self.r * np.sin(self.theta)
-        else:
-            self.height = self.r
-
 
     def drawBench(self, ax=None):
         """docstring for drawBench"""
@@ -148,8 +219,8 @@ class Spherical(OpticalElement):
 
 class SphericalWall(Spherical):
     """A spherical with total absorption"""
-    def __init__(self, centre,  R, theta):
-        super(SphericalWall, self).__init__( centre, R, theta)
+    def __init__(self, centre,  R, theta=None, height=None):
+        super(SphericalWall, self).__init__( centre, R, theta, height)
     
     def propagate_ray(self, ray):
         """Implements propagate_ray for Wall by terminating ray"""
@@ -160,8 +231,8 @@ class SphericalWall(Spherical):
 
 class SphericalMirror(Spherical):
     """A totally reflective spherical (both sides)"""
-    def __init__(self, centre,  R, theta):
-        super(SphericalMirror, self).__init__( centre, R, theta)
+    def __init__(self, centre,  R, theta=None, height=None):
+        super(SphericalMirror, self).__init__( centre, R, theta, height)
     
     def propagate_ray(self, ray):
         """Implements propagate_ray for Wall by terminating ray"""
@@ -236,8 +307,8 @@ class Plane(OpticalElement):
 
 class SphericalRefraction(Spherical):
     """A spherical with medium on one side and with air on the other"""
-    def __init__(self, centre,  R, theta, n1, n2):
-        super(SphericalRefraction, self).__init__( centre, R, theta)
+    def __init__(self, centre,  R, n1, n2, theta=None, height=None):
+        super(SphericalRefraction, self).__init__( centre, R, theta, height)
         self.n1 = n1
         self.n2 = n2        
     def propagate_ray(self, ray):
