@@ -44,6 +44,54 @@ class OpticalElement(object):
         return ax
 
 
+class RefractionMixin(object):
+    """docstring for RefractionMixin"""
+    def __init__(self):
+        super(RefractionMixin, self).__init__()
+    
+    def _refract(self, ray, n):
+        """The actual refraction/TIR is performed here as once the normal n has been
+            defined by the geometry specific code the process is generic"""
+        d = self.distance(ray) 
+        c = -np.dot(n, ray.k) 
+        
+        # Set up the oreintation of the interface
+        print "Normal = %s" %(str(n))
+        if c > 0 :
+            print "Refracting n1 -> n2"
+            # Ray is propagating n1 -> n2
+            assert ray.n == self.n1(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n1(ray.wavelength))
+            
+            r = self.n1(ray.wavelength)/self.n2(ray.wavelength)    
+        elif c < 0:
+            print "Refracting n2 -> n1"
+            
+            # Ray is propagating n2 -> n1
+            assert ray.n == self.n2(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n2(ray.wavelength))
+            
+            r = self.n2(ray.wavelength)/self.n1(ray.wavelength)
+            c = -c
+            n = -n
+
+        else:
+            raise Exception("A fatal error has occurred - Ray is parallel to the interface")
+         
+            
+        if 1-(r**2)*(1-c**2) < 0:
+            # Ray is TIR
+            k_prime = ray.k - 2*np.dot(ray.k, n)*n
+            ray.append(ray.p + d*ray.k, k_prime)
+        else:
+            # Ray is refracted       
+            k_prime = r*ray.k + (r*c - np.sqrt(1-(r**2)*(1-c**2)))*n   
+            ray.append(ray.p + d*ray.k, k_prime)     
+            ray.n = ray.n = ray.n/r
+            
+        ray.isTerminated = False  
+               
+        return ray
+        
+
 class CompositeObject(OpticalElement):
     """docstring for CompositeObject"""
     def __init__(self, centre):
@@ -82,7 +130,6 @@ class PlanoConvex(CompositeObject):
         self.height = height
         self.radius = radius
         self.thickness = thickness 
-         
 
 class CubeComp(CompositeObject):
     """docstring for CubeComp"""
@@ -305,7 +352,7 @@ class Plane(OpticalElement):
         return np.logical_and(np.abs(alpha) <= 1, np.abs(beta) <= 1)
         
 
-class SphericalRefraction(Spherical):
+class SphericalRefraction(Spherical, RefractionMixin):
     """A spherical with medium on one side and with air on the other"""
     def __init__(self, centre,  R, n1, n2, theta=None, height=None):
         super(SphericalRefraction, self).__init__( centre, R, theta, height)
@@ -317,42 +364,9 @@ class SphericalRefraction(Spherical):
         
         d = self.distance(ray) 
         n = normalise(ray.p + d*ray.k - self.centre)  
-        c = -np.dot(n, ray.k) 
-        
-        # Set up the oreintation of the interface
-        
-        if c > 0 :
-            # Ray is propagating n1 -> n2
-            assert ray.n == self.n1(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n1(ray.wavelength))
-            
-            r = self.n1(ray.wavelength)/self.n2(ray.wavelength)    
-        elif c < 0:
-            # Ray is propagating n2 -> n1
-            assert ray.n == self.n2(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n2(ray.wavelength))
-            
-            r = self.n2(ray.wavelength)/self.n1(ray.wavelength)
-            c = -c
-            n = -n
+        return self._refract(ray,n)  
 
-        else:
-            raise Exception("A fatal error has occurred - Ray is parallel to the interface")
-         
-            
-        if 1-(r**2)*(1-c**2) < 0:
-            # Ray is TIR
-            k_prime = ray.k - 2*np.dot(ray.k, n)*n
-            ray.append(ray.p + d*ray.k, k_prime)
-        else:
-            # Ray is refracted       
-            k_prime = r*ray.k + (r*c - np.sqrt(1-(r**2)*(1-c**2)))*n   
-            ray.append(ray.p + d*ray.k, k_prime)     
-            ray.n = ray.n/r
-            
-        ray.isTerminated = False  
-               
-        return ray  
-
-class PlaneRefraction(Plane):
+class PlaneRefraction(Plane, RefractionMixin):
     """A plane with some medium with refractive index n1 on one side
          and n2 on the other. The normal vector is defined to point towards
          the medium with n1"""
@@ -367,42 +381,7 @@ class PlaneRefraction(Plane):
         """Implements propagate_ray for PlaneRefraction by calculating the 
             refracted wave vector using the formula from wikipedia"""     
         
-        d = self.distance(ray) 
-        c = -np.dot(self.normal, ray.k) 
-        
-        # Set up the oreintation of the interface
-        
-        if c > 0 :
-            # Ray is propagating n1 -> n2
-            assert ray.n == self.n1(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n1(ray.wavelength))
-            
-            r = self.n1(ray.wavelength)/self.n2(ray.wavelength)    
-            n = self.normal
-        elif c < 0:
-            # Ray is propagating n2 -> n1
-            assert ray.n == self.n2(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n2(ray.wavelength))
-            
-            r = self.n2(ray.wavelength)/self.n1(ray.wavelength)
-            c = -c
-            n = -self.normal
-
-        else:
-            raise Exception("A fatal error has occurred - Ray is parallel to the interface")
-         
-            
-        if 1-(r**2)*(1-c**2) < 0:
-            # Ray is TIR
-            k_prime = ray.k - 2*np.dot(ray.k, n)*n
-            ray.append(ray.p + d*ray.k, k_prime)
-        else:
-            # Ray is refracted       
-            k_prime = r*ray.k + (r*c - np.sqrt(1-(r**2)*(1-c**2)))*n   
-            ray.append(ray.p + d*ray.k, k_prime)     
-            ray.n = self.n2(ray.wavelength) 
-            
-        ray.isTerminated = False  
-               
-        return ray 
+        return self._refract(ray,self.normal)
     
 
 
