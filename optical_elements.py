@@ -131,6 +131,66 @@ class PlanoConvex(CompositeObject):
         self.radius = radius
         self.thickness = thickness 
 
+class Cylidrical(OpticalElement):
+    """docstring for Cylidrical"""
+    def __init__(self, centre, L, r):
+        super(Cylidrical, self).__init__(centre)
+        self.L = isVector(L)
+        if L[2] != 0:
+            raise Exception("Only cylinders in the xy plane are currently supported :(")
+        self.r = r
+        self.R = normalise(np.cross([0,0,1], self.L))
+        self.points = [self.centre + self.L + self.r*self.R,
+                       self.centre + self.L - self.r*self.R,
+                       self.centre - self.L - self.r*self.R,
+                       self.centre - self.L + self.r*self.R]
+    def drawBench(self, ax):
+        ax = super(Cylidrical, self).drawBench(ax)
+        poly = Polygon([x[:2] for x in self.points], True, facecolor = 'none')
+        ax.add_patch(poly)
+    
+    def distance(self, ray):
+        
+        r_prime = self.centre - ray.p
+        
+        # Projection onto cylinder cross section
+        x = np.dot(r_prime, [0,0,1])*np.array([0,0,1]) + np.dot(r_prime, self.R)*self.R
+        k = normalise(np.dot(ray.k, [0,0,1])*np.array([0,0,1]) + np.dot(ray.k, self.R)*self.R)
+        
+        # If the sqrt is imaginary it never intersects        
+        sq = np.dot(x, k)**2 - (np.linalg.norm(x)**2 - self.r**2)        
+        if sq > 0 :
+            l1 = np.dot(x, k) + np.sqrt(sq)
+            l2 = np.dot(x, k) - np.sqrt(sq)
+        else:
+            return float('inf')
+        
+        # Try the closest intersection first
+        d = sorted(np.array([l1,l2])/np.dot(ray.k, k)) 
+        if d[0] > eps and np.abs(np.dot(self.centre - ray.p + d[0]*ray.k, self.L)/np.linalg.norm(self.L)**2) <= 1:
+            return d[0] 
+        
+        # Now try the further away one                
+        elif d[1] > eps and np.abs(np.dot(self.centre - ray.p + d[1]*ray.k, self.L)/np.linalg.norm(self.L)**2) <= 1:
+            return d[1]        
+        else: 
+            return float('inf')  
+
+class CylindricalRefraction(Cylidrical, RefractionMixin):
+    """docstring for CylindricalRefraction"""
+    def __init__(self, centre, L, r, n1, n2):
+        super(CylindricalRefraction, self).__init__(centre, L, r)
+        self.n1 = n1
+        self.n2 = n2
+        
+    def propagate_ray(self, ray):
+        d = self.distance(ray) 
+        p = ray.p + d*ray.k
+        z = np.cross(p-self.centre, self.L)
+        n = normalise(np.cross(self.L, z))
+ 
+        return self._refract(ray, n)
+
 class CubeComp(CompositeObject):
     """docstring for CubeComp"""
     def __init__(self, centre,  a, b, c, ref_index):
