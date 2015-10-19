@@ -5,6 +5,8 @@ from .utils import isVector, normalise
 from matplotlib.patches import Polygon
 from scipy.spatial import ConvexHull
 from mpl_toolkits.mplot3d import Axes3D
+from .import n_air
+eps = np.finfo(np.float64).eps
 
 # TODO Add kwargs to draw that pass to Polygon to allow for more complex rendering ie colors for materials
 class OpticalElement(object):
@@ -40,6 +42,7 @@ class OpticalElement(object):
             
 
         return ax
+
 
 class Spherical(OpticalElement):
     """docstring for Spherical"""
@@ -126,10 +129,10 @@ class Spherical(OpticalElement):
         
         # Try the closest intersection first
         d = sorted([l1,l2]) 
-        if d[0] > np.finfo(np.float64).eps and self.isIntersect(ray.p + d[0]*ray.k - self.centre):
+        if d[0] > eps and self.isIntersect(ray.p + d[0]*ray.k - self.centre):
             return d[0] 
         # Now try the further away one                
-        elif d[1] > np.finfo(np.float64).eps and self.isIntersect(ray.p + d[1]*ray.k - self.centre):
+        elif d[1] > eps and self.isIntersect(ray.p + d[1]*ray.k - self.centre):
             return d[1]        
         else: 
             return float('inf')
@@ -169,18 +172,13 @@ class SphericalMirror(Spherical):
         # Normal at the point of intersection
         n = normalise(p - self.centre)  
         
-        # Orthogonal to both k and n
-        m = normalise(np.cross(n, np.cross(ray.k, n)))
-        
-        
-        # New wavevector
-        k_prime = np.dot(ray.k, m)*m - np.dot(ray.k, n)*n
-         
-        #k_prime = ray.k - 2*np.dot(ray.k, n)*n        
+        k_prime = ray.k - 2*np.dot(ray.k, n)*n        
            
         ray.append(p, k_prime)
         ray.isTerminated = False
         return ray    
+
+
 
 
 class Plane(OpticalElement):
@@ -235,6 +233,160 @@ class Plane(OpticalElement):
         
         return np.logical_and(np.abs(alpha) <= 1, np.abs(beta) <= 1)
         
+
+class SphericalRefraction(Spherical):
+    """A spherical with medium on one side and with air on the other"""
+    def __init__(self, centre,  R, theta, n1, n2):
+        super(SphericalRefraction, self).__init__( centre, R, theta)
+        self.n1 = n1
+        self.n2 = n2        
+    def propagate_ray(self, ray):
+        """Implements propagate_ray for SphericalRefraction by calculating the 
+            refracted wave vector using the formula from wikipedia"""          
+        
+        d = self.distance(ray) 
+        n = normalise(ray.p + d*ray.k - self.centre)  
+        c = -np.dot(n, ray.k) 
+        
+        # Set up the oreintation of the interface
+        
+        if c > 0 :
+            # Ray is propagating n1 -> n2
+            assert ray.n == self.n1(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n1(ray.wavelength))
+            
+            r = self.n1(ray.wavelength)/self.n2(ray.wavelength)    
+        elif c < 0:
+            # Ray is propagating n2 -> n1
+            assert ray.n == self.n2(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n2(ray.wavelength))
+            
+            r = self.n2(ray.wavelength)/self.n1(ray.wavelength)
+            c = -c
+            n = -n
+
+        else:
+            raise Exception("A fatal error has occurred - Ray is parallel to the interface")
+         
+            
+        if 1-(r**2)*(1-c**2) < 0:
+            # Ray is TIR
+            k_prime = ray.k - 2*np.dot(ray.k, n)*n
+            ray.append(ray.p + d*ray.k, k_prime)
+        else:
+            # Ray is refracted       
+            k_prime = r*ray.k + (r*c - np.sqrt(1-(r**2)*(1-c**2)))*n   
+            ray.append(ray.p + d*ray.k, k_prime)     
+            ray.n = ray.n/r
+            
+        ray.isTerminated = False  
+               
+        return ray  
+
+class PlaneRefraction(Plane):
+    """A plane with some medium with refractive index n1 on one side
+         and n2 on the other. The normal vector is defined to point towards
+         the medium with n1"""
+         
+    def __init__(self, centre,  a, b, n1, n2):
+        super(PlaneRefraction, self).__init__(centre,  a, b)
+        self.n1 = n1
+        self.n2 = n2
+
+     
+    def propagate_ray(self, ray):     
+        """Implements propagate_ray for PlaneRefraction by calculating the 
+            refracted wave vector using the formula from wikipedia"""     
+        
+        d = self.distance(ray) 
+        c = -np.dot(self.normal, ray.k) 
+        
+        # Set up the oreintation of the interface
+        
+        if c > 0 :
+            # Ray is propagating n1 -> n2
+            assert ray.n == self.n1(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n1(ray.wavelength))
+            
+            r = self.n1(ray.wavelength)/self.n2(ray.wavelength)    
+            n = self.normal
+        elif c < 0:
+            # Ray is propagating n2 -> n1
+            assert ray.n == self.n2(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n2(ray.wavelength))
+            
+            r = self.n2(ray.wavelength)/self.n1(ray.wavelength)
+            c = -c
+            n = -self.normal
+
+        else:
+            raise Exception("A fatal error has occurred - Ray is parallel to the interface")
+         
+            
+        if 1-(r**2)*(1-c**2) < 0:
+            # Ray is TIR
+            k_prime = ray.k - 2*np.dot(ray.k, n)*n
+            ray.append(ray.p + d*ray.k, k_prime)
+        else:
+            # Ray is refracted       
+            k_prime = r*ray.k + (r*c - np.sqrt(1-(r**2)*(1-c**2)))*n   
+            ray.append(ray.p + d*ray.k, k_prime)     
+            ray.n = self.n2(ray.wavelength) 
+            
+        ray.isTerminated = False  
+               
+        return ray 
+    
+
+
+
+
+class Cube(OpticalElement):
+    """docstring for Cube"""
+    def __init__(self, centre,  a, b, c, ref_index):
+        super(Cube, self).__init__(centre)
+        self.a = isVector(a)
+        self.b = isVector(b)
+        self.c = isVector(c)
+        
+        self.ref_index = ref_index
+        
+        self.side_centres = [self.centre + self.c,
+                              self.centre - self.c,
+                              self.centre + self.b,
+                              self.centre - self.b,
+                              self.centre + self.a,
+                              self.centre - self.a]
+        # Defined to all have outward facing normals
+        self.sides = [PlaneRefraction(self.side_centres[0],  self.a, self.b, lambda x:n_air,self.ref_index),
+                      PlaneRefraction(self.side_centres[1],  -self.a, self.b,lambda x:n_air, self.ref_index),
+                      PlaneRefraction(self.side_centres[2],  -self.a, self.c,lambda x:n_air, self.ref_index),
+                      PlaneRefraction(self.side_centres[3],  self.a, self.c, lambda x:n_air,self.ref_index),
+                      PlaneRefraction(self.side_centres[4],  self.b, self.c, lambda x:n_air,self.ref_index),
+                      PlaneRefraction(self.side_centres[5],  -self.b, self.c,lambda x:n_air, self.ref_index)]
+    
+    def drawBench(self, ax=None):
+        """Draws a projection of the object on the xy plane"""
+        ax = super(Cube, self).drawBench(ax)
+        points = np.array([x[:2] for y in self.sides for x in y.points ])
+        hull = ConvexHull(points)
+        
+        for simplex in hull.simplices:
+         ax.plot(points[simplex,0], points[simplex,1], 'k-')
+
+    def distance(self, ray):
+        # Decide which side is closest and return that distance
+        d = np.array([s.distance(ray) for s in self.sides])               
+        # Filter out negative distances 
+        d[np.logical_or(np.isnan(d), d <= 0)] = float('inf')        
+        self.entrance_idx = np.argmin(d) 
+        return np.min(d) 
+                
+    def propagate_ray(self, ray): 
+        # Work out which side we should pass propagation to 
+        d = np.array([s.distance(ray) for s in self.sides])
+        d[np.logical_or(np.isnan(d), d <= 0+eps)] = float('inf')
+                        
+        ray = self.sides[np.argmin(d)].propagate_ray(ray)
+
+        return ray
+
 class Mirror(Plane):
     """A totally reflective plane (both sides)"""
     def __init__(self, centre,  a, b):
