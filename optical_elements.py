@@ -9,6 +9,7 @@ from . import n_air
 
 eps = np.finfo(np.float64).eps
 
+
 # TODO Add kwargs to draw that pass to Polygon to allow for more complex rendering ie colors for materials
 class OpticalElement(object):
     
@@ -46,15 +47,16 @@ class OpticalElement(object):
 
 
 
+
 class Cube(OpticalElement):
     """docstring for Cube"""
-    def __init__(self, centre,  a, b, c, n):
+    def __init__(self, centre,  a, b, c, ref_index):
         super(Cube, self).__init__(centre)
         self.a = isVector(a)
         self.b = isVector(b)
         self.c = isVector(c)
         
-        self.n = n
+        self.ref_index = ref_index
         
         self.side_centres = [self.centre + self.c,
                               self.centre - self.c,
@@ -63,12 +65,12 @@ class Cube(OpticalElement):
                               self.centre + self.a,
                               self.centre - self.a]
         
-        self.sides = [PlaneInterface(self.side_centres[0],  self.a, self.b, self.n),
-                      PlaneInterface(self.side_centres[1],  -self.a, self.b, self.n),
-                      PlaneInterface(self.side_centres[2],  -self.a, self.c, self.n),
-                      PlaneInterface(self.side_centres[3],  self.a, self.c, self.n),
-                      PlaneInterface(self.side_centres[4],  self.b, self.c, self.n),
-                      PlaneInterface(self.side_centres[5],  -self.b, self.c, self.n)]
+        self.sides = [PlaneInterface(self.side_centres[0],  self.a, self.b, self.ref_index),
+                      PlaneInterface(self.side_centres[1],  -self.a, self.b, self.ref_index),
+                      PlaneInterface(self.side_centres[2],  -self.a, self.c, self.ref_index),
+                      PlaneInterface(self.side_centres[3],  self.a, self.c, self.ref_index),
+                      PlaneInterface(self.side_centres[4],  self.b, self.c, self.ref_index),
+                      PlaneInterface(self.side_centres[5],  -self.b, self.c, self.ref_index)]
     
     def drawBench(self, ax=None):
         """Draws a projection of the object on the xy plane"""
@@ -80,11 +82,10 @@ class Cube(OpticalElement):
          ax.plot(points[simplex,0], points[simplex,1], 'k-')
 
     def distance(self, ray):
-        d = np.array([s.distance(ray) for s in self.sides])
+        d = np.array([s.distance(ray) for s in self.sides])        
         
         # Filter out negative distances but leave 0 distance
-        d[np.logical_or(np.isnan(d), d < 0)] = float('inf')
-        
+        d[np.logical_or(np.isnan(d), d < 0)] = float('inf')        
         self.entrance_idx = np.argmin(d) 
         return d
                 
@@ -93,18 +94,59 @@ class Cube(OpticalElement):
         ray = self.sides[self.entrance_idx].propagate_ray(ray)
         
         ## Decides which side it will exit through (can't be entrance side)
-        ## TODO this is where TIR could be incorporated
         d = np.array([s.distance(ray) for s in self.sides])
         d[np.logical_or(np.isnan(d), d <= 0+eps)] = float('inf')
         self.exit_idx = np.argmin(d)
         ray.append(ray.p + np.min(d)*ray.k, ray.k)
         
         return ray
+    
+    def isTIR(self, ray, ref_index):
+        """Decides whether ray is totally internally reflected
+            this relies on exit_idx being defined"""
+        exit_side = self.sides[self.exit_idx]       
+        d = exit_side.distance(ray)[0] 
         
-    def exitToAir(self,ray):
-        """docstring for exitToAir"""
-        ray = self.sides[self.exit_idx].exitToAir(ray)
+        n = -1*exit_side.normal                 
+        r = ray.n/ref_index(ray.wavelength)   
+        c = -np.dot(n, ray.k) 
+        
+        if 1-(r**2)*(1-c**2) < 0:
+            return True 
+        else:
+            return False
+    def TIR(self, ray):
+        '''Propagates a ray through TIR'''
+        exit_side = self.sides[self.exit_idx]       
+        n = -1*exit_side.normal                 
+        
+        # Does the reflection
+        k_prime = ray.k - 2*np.dot(ray.k, n)*n
+        ray.append(ray.p, k_prime)
+        
+        # Propagates to the next edge ready to repeat the loop 
+        d = np.array([s.distance(ray) for s in self.sides])
+        d[np.logical_or(np.isnan(d), d <= 0+eps)] = float('inf')
+        self.exit_idx = np.argmin(d)
+        self.exit_idx
+        ray.append(ray.p + np.min(d)*ray.k, ray.k) 
+        
         return ray
+    def exitToAir(self,ray):        
+        exit_side = self.sides[self.exit_idx]       
+        d = exit_side.distance(ray)[0] 
+        
+        n = -1*exit_side.normal                 
+        r = ray.n/n_air   
+        c = -np.dot(n, ray.k)
+        
+        k_prime = r*ray.k + (r*c - np.sqrt(1-(r**2)*(1-c**2)))*n    
+        ray.append(ray.p + d*ray.k, k_prime)     
+        ray.isTerminated = False  
+        ray.n = n_air    
+        
+        return ray
+
 class Spherical(OpticalElement):
     """docstring for Spherical"""
     
@@ -217,7 +259,7 @@ class SphericalWall(Spherical):
     
     def propagate_ray(self, ray):
         """Implements propagate_ray for Wall by terminating ray"""
-        d = self.distance(ray)        
+        d = self.distance(ray)[0]        
         ray.append(ray.p + d*ray.k, ray.k)
         ray.isTerminated = True
         return ray       
@@ -230,7 +272,7 @@ class SphericalMirror(Spherical):
     def propagate_ray(self, ray):
         """Implements propagate_ray for Wall by terminating ray"""
 
-        d = self.distance(ray) 
+        d = self.distance(ray)[0] 
         p = ray.p + d*ray.k  
                  
         k_prime = ray.k - 2*np.dot(ray.k, n)*n        
@@ -238,6 +280,7 @@ class SphericalMirror(Spherical):
         ray.append(p, k_prime)
         ray.isTerminated = False
         return ray    
+
 
 
 
@@ -305,7 +348,7 @@ class Mirror(Plane):
             about the normal of the plane.
             """
         k_prime = ray.k - 2*np.dot(ray.k, self.normal)*self.normal 
-        d = self.distance(ray)
+        d = self.distance(ray)[0]
         ray.append(ray.p + d*ray.k, k_prime)        
         return ray
         
@@ -316,7 +359,7 @@ class Wall(Plane):
     
     def propagate_ray(self, ray):
         """Implements propagate_ray for Wall by terminating ray"""
-        d = self.distance(ray)        
+        d = self.distance(ray)[0]        
         ray.append(ray.p + d*ray.k, ray.k)
         ray.isTerminated = True
         return ray
@@ -341,7 +384,7 @@ class Screen(Plane):
         """Implements propagate_ray for Screen, projects the ray's intersection with
             the screen onto plane orthogonal coordinates and draws it as a point on the
             associated mpl figure"""    
-        d = self.distance(ray)        
+        d = self.distance(ray)[0]        
         ray.append(ray.p + d*ray.k, ray.k)
         ray.isTerminated = True
         
@@ -356,36 +399,23 @@ class Screen(Plane):
 
 class PlaneInterface(Plane):
     """docstring for PlaneInterface"""
-    def __init__(self, centre,  a, b,n2):
+    def __init__(self, centre,  a, b,ref_index):
         super(PlaneInterface, self).__init__(centre,  a, b)
-        self.n2 = n2
+        self.ref_index = ref_index
      
     def propagate_ray(self, ray):     
         """Implements propagate_ray for Wall by terminating ray"""     
-        d = self.distance(ray)     
-             
-        r = ray.n/self.n2    
+        d = self.distance(ray)[0]                  
+        r = ray.n/self.ref_index(ray.wavelength)    
         c = -np.dot(self.normal, ray.k) 
+        
         if 1-(r**2)*(1-c**2) < 0:
-            print("TOTAL INTERNAL REFLECTION")
+            raise Exception("Uncaught TIR found!")
+        
         k_prime = r*ray.k + (r*c - np.sqrt(1-(r**2)*(1-c**2)))*self.normal     
         ray.append(ray.p + d*ray.k, k_prime)     
         ray.isTerminated = False  
-        ray.n = self.n2   
+        ray.n = self.ref_index(ray.wavelength)    
         return ray 
     
-    def exitToAir(self, ray):     
-
-        d = self.distance(ray)     
-             
-        r = ray.n/n_air   
-        c = -np.dot(-1*self.normal, ray.k) 
-        if 1-(r**2)*(1-c**2) < 0:
-            print("TOTAL INTERNAL REFLECTION")
-        k_prime = r*ray.k + (r*c - np.sqrt(1-(r**2)*(1-c**2)))*-1*self.normal     
-        ray.append(ray.p + d*ray.k, k_prime)     
-        ray.isTerminated = False  
-        ray.n = n_air  
-        return ray        
-        
-
+    

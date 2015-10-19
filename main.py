@@ -7,6 +7,7 @@ from .optical_elements import Wall, OpticalElement, Mirror, Screen, SphericalWal
 from .sources import Source, SingleRay, CollimatedBeam
 from .utils import rotPlane
     
+    
 class OpticalBench(object):
     """docstring for OpticalBench"""
     def __init__(self, x, y, z):
@@ -55,9 +56,7 @@ class OpticalBench(object):
     def _trace(self, ray):
         """Computes the distance along the ray to each interactor
             then propagates the ray through the one it hits first"""
-        
-        # Last interaction
-        
+
         distances = []
         # Calculate distances to all objects before current
         for i in range(len(self.interactors)): 
@@ -81,11 +80,21 @@ class OpticalBench(object):
 
                 # The object we're about to move into
                 new_obj_idx = int(np.where(distances == 0)[0])
-                ray = self.interactors[new_obj_idx].propagate_ray(ray)                
-                self.last_interaction_idx = new_obj_idx
+                if self.interactors[self.last_interaction_idx].isTIR(ray, self.interactors[new_obj_idx].ref_index):
+                    # Ray is TIR
+                    ray = self.interactors[self.last_interaction_idx].TIR(ray)
+                else:
+                    # Ray propagates into new object
+                    ray = self.interactors[new_obj_idx].propagate_ray(ray)                
+                    self.last_interaction_idx = new_obj_idx
+            
             elif np.sum(distances == 0) == 0:
+                print "Refracting into air"
                 # The ray is about to be emmited back into the air
-                ray = self.interactors[self.last_interaction_idx].exitToAir(ray)
+                if self.interactors[self.last_interaction_idx].isTIR(ray, lambda x:n_air):
+                    ray = self.interactors[self.last_interaction_idx].TIR(ray)                    
+                else:
+                    ray = self.interactors[self.last_interaction_idx].exitToAir(ray)
             
             else:
                 # This is an error
@@ -128,22 +137,25 @@ class OpticalBench(object):
         for s in self.source_list:
             for r in s:
                 r.drawBench(ax)
+
+
+glass = lambda l : 1.5046 + 4200/l**2
+water =  lambda l : 1.319 + 6878/l**2        
                 
-                
-        
 def test():
     
     ob = OpticalBench(.5,.5,.5)
-    for i in np.linspace(0,1,30):
-        ob.addSource(SingleRay([0.1, i, 0.5], [1,0,0], 100))
-    #ob.addSource(SingleRay([0.1, 0.45, 0.5], [1,0,0], 100))
+    for i in np.linspace(-.99,.99,10):
+        ob.addSource(SingleRay([0.1, 0.5, 0.5], [1,i,0], 500))
+    ob.addSource(SingleRay([0.15, 0.3, 0.5], [1,0.5,0], 500))
     #ob.addSource(SingleRay([0.9, 0.75, 0.5], [-1,-.5,0], 100))
-    #ob.addElement(Cube([0.3, 0.5, 0.5], [0.1, 0,0],[0,0.1,0],[0,0,0.1], 1.5))
-    #ob.addElement(Cube([0.7, 0.5, 0.5], [0.1, 0,0],[0,0.1,0],[0,0,0.1], 1.6))
+    ob.addElement(Cube([0.3, 0.5, 0.5], [0.1, 0,0],[0,0.1,0],[0,0,0.1], glass))
+    ob.addElement(Cube([0.5, 0.5, 0.5], [0.1, 0,0],[0,0.1,0],[0,0,0.1], lambda x:1))
+    ob.addElement(Cube([0.3, 0.7, 0.5], [0.1, 0,0],[0,0.1,0],[0,0,0.1], lambda x:1.45))
     
     #ob.addSource(CollimatedBeam([0.1, 0.5, 0.5], [1,0,0], 0.05, 10, 100))    
     
-    ob.addElement(SphericalMirror([0.3, 0.5, 0.5], [0.5, 0,0],0.5))
+    #ob.addElement(SphericalMirror([0.3, 0.5, 0.5], [0.5, 0,0],0.5))
 
     #ob.addElement(PlaneInterface([0.5, 0.5, 0.5], [0,-0.1,0],[0,0,0.2], 1.3))
     #ob.addElement(Mirror([0.5, 0.5, 0.5], *rotPlane(0.1,0.1,np.pi/4.)))
