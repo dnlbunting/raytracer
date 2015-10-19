@@ -2,7 +2,7 @@
 from abc import ABCMeta, abstractmethod
 import numpy as np
 import matplotlib.pyplot as plt
-from .optical_elements import Wall, OpticalElement, Mirror, Screen, SphericalWall
+from .optical_elements import Wall, OpticalElement, Mirror, Screen, SphericalWall, SphericalRefraction, PlaneRefraction,Cube, CubeComp
 from .sources import Source, SingleRay, CollimatedBeam
 
 
@@ -88,18 +88,27 @@ class OpticalBench(object):
         for s in self.source_list:
             for r in s:
                 r.drawBench(ax)
-                
+glass = lambda l : 1.5046 + 4200/l**2
+water =  lambda l : 1.319 + 6878/l**2        
+air = lambda l : 1.                                
                 
         
 def test():
     ob = OpticalBench(.5,.5,.5)
     #ob.addSource(SingleRay([0.1, 0.3, 0.5], [1,0.5,0], 100))
-    ob.addSource(CollimatedBeam([0.1, 0.5, 0.5], [1,0,0], 0.2, 10, 100))    
-    ob.addElement(SphericalWall([0.5, 0.5, 0.5], [-0.1,0,0],0.5*np.pi))
+    for i in np.linspace(-.99,.99,30):
+        ob.addSource(SingleRay([0.1, 0.5, 0.5], [1,i,0], 500))
+    #ob.addElement(PlaneRefraction([0.5, 0.5, 0.5], [0,-.1,0],[0,0,0.1], lambda x:1.5, lambda x:1.))
+    ob.addElement(Cube([0.3, 0.5, 0.5], [0.1, 0,0],[0,0.1,0],[0,0,0.1], glass))
+    
+    #ob.addSource(CollimatedBeam([0.1, 0.5, 0.5], [1,0,0], 0.2, 10, 100))    
+    #ob.addElement(PlaneRefraction([0.6, 0.5, 0.5], [0,-0.2397127693021015,0],[0,0,0.2397127693021015], glass, air))    
+    #ob.addElement(SphericalRefraction([1, 0.5, 0.5], [-0.5,0,0],0.5, air, glass))
     #ob.addElement(Mirror([0.5, 0.5, 0.5], [0,0.1,0],[0,0,0.2]))
     ##ob.addElement(Mirror([0.2, 0.7, 0.5], [0,0,.1],[0,.1,0]))
     #
-    ob.addElement(Screen([0.8, 0.5, 0.5], [0,.5,0],[0,0,0.5]))
+    #ob.addElement(Screen([0.8, 0.5, 0.5], [0,.5,0],[0,0,0.5]))
     
     ob.Render()
     ob.drawBench()
+    return ob
