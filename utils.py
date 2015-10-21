@@ -36,6 +36,9 @@ def unifDisk(n, rmax, m):
 def rotPlane(a,b,t):
     return ([a*np.cos(t), a*np.sin(t),0], [0,0,b])
 
+def rotCube(a,b,c,t):
+    return ([a*np.cos(t), a*np.sin(t),0], [b*np.cos(t), -b*np.sin(t),0],  [0,0,c])
+
 def wavelengthToHex(wl):
     if (wl >= 380 and wl < 440):
         R = -1 * (wl - 440.) / (440. - 380.)

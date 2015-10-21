@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 import numpy as np
 import matplotlib.pyplot as plt
-from .utils import isVector, normalise
+from .utils import isVector, normalise,wavelengthToHex
 from matplotlib.patches import Polygon
 from scipy.spatial import ConvexHull
 from mpl_toolkits.mplot3d import Axes3D
@@ -57,18 +57,20 @@ class RefractionMixin(object):
         c = -np.dot(n, ray.k) 
         
         # Set up the oreintation of the interface
-        print "Normal = %s" %(str(n))
+        #print "Normal = %s" %(str(n))
         if c > 0 :
             print "Refracting n1 -> n2"
             # Ray is propagating n1 -> n2
-            assert ray.n == self.n1(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n1(ray.wavelength))
-            
+            if ray.n != self.n1(ray.wavelength):
+                print "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n1(ray.wavelength))
+                
             r = self.n1(ray.wavelength)/self.n2(ray.wavelength)    
         elif c < 0:
             print "Refracting n2 -> n1"
             
             # Ray is propagating n2 -> n1
-            assert ray.n == self.n2(ray.wavelength), "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n2(ray.wavelength))
+            if ray.n != self.n2(ray.wavelength):
+                print "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n2(ray.wavelength))
             
             r = self.n2(ray.wavelength)/self.n1(ray.wavelength)
             c = -c
@@ -293,7 +295,7 @@ class Spherical(OpticalElement):
                     
             T = np.linspace(self.t_0-self.theta, self.t_0+self.theta, 100)
             points = [[self.r*np.cos(t)+self.centre[0], self.r*np.sin(t)+self.centre[1]] for t in T]
-            poly = Polygon(points, False, facecolor = 'none')
+            poly = Polygon(points, True, facecolor = 'none')
             ax.add_patch(poly)
         
         # TODO Make it so that the spherical can have a z comp
@@ -408,7 +410,7 @@ class Plane(OpticalElement):
     def __init__(self, centre,  a, b):
         super(Plane, self).__init__(centre)
         
-        assert np.dot(a, b) == 0, "Vectors must be orthogonal"
+        assert np.dot(a, b) < eps, "Vectors must be orthogonal"
         
         self.a = isVector(a)
         self.b  = isVector(b)
@@ -461,7 +463,8 @@ class SphericalRefraction(Spherical, RefractionMixin):
             refracted wave vector using the formula from wikipedia"""          
         
         d = self.distance(ray) 
-        n = normalise(ray.p + d*ray.k - self.centre)  
+        n = normalise(ray.p + d*ray.k - self.centre) 
+        print n 
         return self._refract(ray,n)  
 
 class PlaneRefraction(Plane, RefractionMixin):
@@ -594,6 +597,6 @@ class Screen(Plane):
         alpha = np.dot(self.a, (ray.p-self.centre))/np.linalg.norm(self.a)
         beta = np.dot(self.b, (ray.p-self.centre))/np.linalg.norm(self.b)
         
-        self.ax.scatter(alpha, beta)
+        self.ax.scatter(alpha, beta, c=wavelengthToHex(ray.wavelength),marker='.', lw=0)
         return ray
         

@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 import numpy as np
 import matplotlib.pyplot as plt
-from .utils import isVector, normalise, unifDisk
+from .utils import isVector, normalise, unifDisk, wavelengthToHex
 from . import n_air
 
 
@@ -33,6 +33,7 @@ class CollimatedBeam(Source):
         self.direction = normalise(direction)
         self.radius = radius
         self.N = N
+
         self.wavelength = wavelength
         
         
@@ -50,8 +51,11 @@ class CollimatedBeam(Source):
         self.ray_list =  self._initRays()
     def _initRays(self):
         """docstring for _initRays"""
-        pos = [self.centre + self.u * r*np.cos(t) + self.v *r*np.sin(t) for r,t in unifDisk(10,self.radius,6)]
-        return [Ray(p, self.direction, self.wavelength) for p in pos] 
+        pos = [self.centre + self.u * r*np.cos(t) + self.v *r*np.sin(t) for r,t in unifDisk(self.N,self.radius,6)]
+        if self.wavelength == 'white':
+            return [Ray(p, self.direction, np.random.randint(400,700)) for p in pos]
+        else:
+            return  [Ray(p, self.direction, self.wavelength) for p in pos]
         
     
 class SingleRay(Source):
@@ -76,7 +80,7 @@ class Ray(object):
         self.k = isVector(k)
         self.wavelength = wavelength
         self.isTerminated = False
-        self.n = n_air # Index of refraction of the medium currently in
+        self._n = n_air # Index of refraction of the medium currently in
                    # TODO make less of hack
         
     
@@ -91,6 +95,13 @@ class Ray(object):
     @k.setter
     def k(self, new):
         self._k = normalise(new)
+    @property
+    def n(self):
+        return self._n
+    @n.setter
+    def n(self, new):
+        self._n = new
+        #print "ray.n = %s" %(self._n)
                         
     def drawBench(self, ax=None):
         """docstring for drawBench"""
@@ -98,9 +109,11 @@ class Ray(object):
             fig = plt.figure()
             ax = fig.add_axes([0.05,0.05, 0.9, 0.9])
             
-        ax.plot(self.vertices[:,0], self.vertices[:,1],'.-')
+        ax.plot(self.vertices[:,0], self.vertices[:,1],'.-', color=wavelengthToHex(self.wavelength))
     
     def append(self, p, k):
         """Update the position and direction of the ray"""
         self.vertices = np.vstack((self.vertices, isVector(p)))
         self.k = isVector(k)
+        #print "k = %s, p = %s" % (str(self.k), str(self.p))
+        
