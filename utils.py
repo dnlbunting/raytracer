@@ -3,6 +3,10 @@
 import numpy as np
 
 
+def air(l):
+return 1.                                
+
+
 def isVector(x):
     if isinstance(x, (list, tuple, np.ndarray)) and len(x) != 3:
         raise Exception("Invalid 3d vector")

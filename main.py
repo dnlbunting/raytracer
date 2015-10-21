@@ -2,10 +2,10 @@
 from abc import ABCMeta, abstractmethod
 import numpy as np
 import matplotlib.pyplot as plt
-from .optical_elements import Wall, OpticalElement, Mirror, Screen, SphericalWall, SphericalRefraction, PlaneRefraction,Cube, CubeComp
+from .optical_elements import *
 from .sources import Source, SingleRay, CollimatedBeam
-
-
+from . import OpticalBench
+from .lenses import *
 
     
 class OpticalBench(object):
@@ -22,6 +22,7 @@ class OpticalBench(object):
         self.screen_list = []
         self.element_list = []
         
+        self.render_limit = 5
     def _makeBoundaries(self):
         """docstring for makeBoundaries"""
         
@@ -45,8 +46,10 @@ class OpticalBench(object):
         
         for source in self.source_list:
             for ray in source:
-                while ray.isTerminated is False:
+                i = 0
+                while ray.isTerminated is False and i < self.render_limit:
                     ray = self._trace(ray)
+                    i+=1
                     
     def _trace(self, ray):
         """Computes the distance along the ray to each interactor
@@ -54,8 +57,7 @@ class OpticalBench(object):
         
         distances = []
         for obj in self.interactors:
-            distances.append(obj.distance(ray))
-            
+            distances.append(obj.distance(ray))            
         distances  = np.array(distances)
         distances[np.logical_or(np.isnan(distances), distances < 0)] = float('inf')
         return self.interactors[np.argmin(distances)].propagate_ray(ray)
@@ -88,27 +90,40 @@ class OpticalBench(object):
         for s in self.source_list:
             for r in s:
                 r.drawBench(ax)
-glass = lambda l : 1.5046 + 4200/l**2
-water =  lambda l : 1.319 + 6878/l**2        
+glass = lambda l : 1.5046 + 4200./l**2
+water =  lambda l : 1.319 + 6878./l**2        
 air = lambda l : 1.                                
                 
         
 def test():
-    ob = OpticalBench(.5,.5,.5)
-    #ob.addSource(SingleRay([0.1, 0.3, 0.5], [1,0.5,0], 100))
-    for i in np.linspace(-.99,.99,30):
-        ob.addSource(SingleRay([0.1, 0.5, 0.5], [1,i,0], 500))
-    #ob.addElement(PlaneRefraction([0.5, 0.5, 0.5], [0,-.1,0],[0,0,0.1], lambda x:1.5, lambda x:1.))
-    ob.addElement(Cube([0.3, 0.5, 0.5], [0.1, 0,0],[0,0.1,0],[0,0,0.1], glass))
+    ob = OpticalBench(0.5,0.5,.5)
+    ob.addSource(CollimatedBeam([0.0, 0.5, 0.5], [1,0,0], 0.001, 35, 'white'))
+    ob.addElement(BiConvex([0.2,0.5,0.5], 0.25, [-1.,0,0], 0.001, glass))
+    ob.addElement(Screen([.85, 0.5, 0.5], [0,0.75,0],[0,0,0.5]))
+
     
-    #ob.addSource(CollimatedBeam([0.1, 0.5, 0.5], [1,0,0], 0.2, 10, 100))    
-    #ob.addElement(PlaneRefraction([0.6, 0.5, 0.5], [0,-0.2397127693021015,0],[0,0,0.2397127693021015], glass, air))    
-    #ob.addElement(SphericalRefraction([1, 0.5, 0.5], [-0.5,0,0],0.5, air, glass))
+    #for i in np.linspace(0,.99,30):
+    #    ob.addSource(SingleRay([0.1, i, 0.5], [1,0,0], 500))
+    #ob.addElement(PlaneRefraction([0.55, 0.5, 0.5], [0,-.2,0],[0,0,0.2], glass,air))
+    #ob.addElement(Cube([0.55, 0.3, 0.5], [0.1, 0,0],[0,0.1,0],[0,0,0.1], water))
+    
+    #ob.addSource(CollimatedBeam([0.1, 0.1, 0.5], [1,.5,0], 0.001, 25, "white"))    
+    #ob.addElement(CylindricalRefraction([0.5, 0.5, 0.5], L=[0.2,0,0], r=0.1, n1=air, n2=glass))    
+    #ob.addElement(SphericalRefraction([0.5, 0.5, 0.5], [0.2,0,0],theta=np.pi, n1=air, n2=water))
     #ob.addElement(Mirror([0.5, 0.5, 0.5], [0,0.1,0],[0,0,0.2]))
     ##ob.addElement(Mirror([0.2, 0.7, 0.5], [0,0,.1],[0,.1,0]))
-    #
-    #ob.addElement(Screen([0.8, 0.5, 0.5], [0,.5,0],[0,0,0.5]))
     
+    
+    #ob.addElement(PlaneRefraction([0.55, 0.6, 0.5], [0,0,0.2], [.3,0,0], air, glass))
+    #ob.addElement(PlaneRefraction([0.55, 0.4, 0.5], [.3,0,0],[0,0,0.2], air,glass))
+    #ob.addElement(PlanoConvex([0.5,0.5,0.5], 0.2, [-0.3,0,0], 0.05, glass))
+    #ob.addElement(SphericalRefraction([1, 0.5, 0.5], [-0.3,0,0],theta=0.5, n1=air, n2=glass))
+    
+    #return ob
     ob.Render()
     ob.drawBench()
     return ob
+    
+def lensmakers(r1, r2, n, d):
+    f = 1./( (n-1)*( 1./r1 - 1./r2 + (n-1)*d/(n*r1*r2)) )
+    return f

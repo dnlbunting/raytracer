@@ -2,8 +2,8 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import matplotlib.pyplot as plt
 from .utils import isVector, normalise, unifDisk, wavelengthToHex
-from . import n_air
 
+air = lambda l : 1.                                
 
 
 class Source(object):
@@ -80,7 +80,7 @@ class Ray(object):
         self.k = isVector(k)
         self.wavelength = wavelength
         self.isTerminated = False
-        self._n = n_air # Index of refraction of the medium currently in
+        self._n = air(self.wavelength) # Index of refraction of the medium currently in
                    # TODO make less of hack
         
     
