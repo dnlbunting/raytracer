@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from numpy.testing import assert_allclose
 import unittest
 from scipy.optimize import minimize
-
+from functools import partial
 from .optical_elements import *
 from .sources import Source, SingleRay, CollimatedBeam, Ray
 from . import OpticalBench
@@ -62,51 +62,54 @@ class RefractionTest(unittest.TestCase):
             # Snells law as ratio of sines
             self.assertAlmostEqual(np.sin(incident) / np.sin(refracted), ray.n / curr_n)
 
-'''    
-class LensmakerTest(unittest.TestCase):
 
-    def test_planoconvex(self):    
-        c = 0.15
-        def init(f):           
-            ob = OpticalBench(1.5, 0.5, 0.5)
-            ob.add(CollimatedBeam([0.1,0.5,0.5], [1,0,0], 0.05, 5, 500))   
-            ob.add(Screen([f,0.5, 0.5], [0,0,0.1], [0,0.1,0]))
-            ob.add(PlanoConvex([c, 0.5, 0.5], 0.1, [-1,0,0], 0.01, glass))
-            ob.Render()
-            return(ob)
-            
-        def spotRadius(f):
-            ob = init(f)
-            screen = ob.screen_list[0]
-            r = [x[0]**2+x[1]**2 for x in screen.pixels]
-            return(np.sqrt(np.max(r)))
-            
-        f_optimal = minimize(spotRadius, [2.0], bounds = [(0.,2.99)]).x
-        l = PlanoConvex([c, 0.5, 0.5], 0.1, [-1,0,0], 0.01, glass)
-        self.assertAlmostEqual(f_optimal, l.lensmaker(500)+c, 1)  
+def spotRadius(f, init):
+    ob = init(f)
+    screen = ob.screen_list[0]
+    r = np.sqrt(np.mean([x[0]**2+x[1]**2 for x in screen.pixels]))
+    return(r)    
+class LensTest(unittest.TestCase):
 
-
-    def test_biconvex(self):    
-        c = 0.15
-        def init(f):           
-            ob = OpticalBench(1.5, 0.5, 0.5)
-            ob.add(CollimatedBeam([0.1,0.5,0.5], [1,0,0], 0.05, 5, 500))   
-            ob.add(Screen([f,0.5, 0.5], [0,0,0.1], [0,0.1,0]))
-            ob.add(PlanoConvex([c, 0.5, 0.5], 0.1, [-1,0,0], 0.01, glass))
-            ob.Render()
-            return(ob)
-            
-        def spotRadius(f):
-            ob = init(f)
-            screen = ob.screen_list[0]
-            r = [x[0]**2+x[1]**2 for x in screen.pixels]
-            return(np.sqrt(np.max(r)))
-            
-        f_optimal = minimize(spotRadius, [2.0], bounds = [(0.,2.99)]).x
-        l = PlanoConvex([c, 0.5, 0.5], 0.1, [-1,0,0], 0.01, glass)
-        self.assertAlmostEqual(f_optimal, l.lensmaker(500)+c, 1)  
         
-'''
+    def test_planoconvex(self):    
+        def planoconvex(f, r=50., d=1., t=5.):
+            ob = OpticalBench(150, 50, 50, verbose=False)
+            ob.add(CollimatedBeam([1,50,50], [1,0,0], d, 5, 588))   
+            ob.add(PlanoConvex([50, 50, 50], 40, [r,0,0], t, glass))
+            ob.add(Screen([f,50, 50], [0,0,100], [0,100,0]))
+            ob.Render()
+            return(ob)
+        
+        init = partial(planoconvex)        
+        opt = minimize(spotRadius, [200], bounds = [(55,399)], args=(init))
+        f_optimal = opt.x
+            
+        ob = init(f_optimal)
+        l = ob.element_list[0]
+        
+        self.assertAlmostEqual(f_optimal, l.bfd2(588)+l.centre[0]+0.5*l.thickness+l.w, 1)  
+        
+    def test_biconvex(self):    
+        
+        
+        def biconvex(f, r1=50., r2=50.,t=5., d=1. ):
+            ob = OpticalBench(150, 50, 50, verbose=False)
+            ob.add(CollimatedBeam([1,50,50], [1,0,0], d, 5, 588))        
+            ob.add(BiConvex([50, 50, 50], 40, r1,r2, [1,0,0], t, glass))
+            ob.add(Screen([f,50, 50], [0,0,100], [0,100,0]))
+            ob.Render()
+            return(ob)
+        init = partial(biconvex, r1=50., r2=75.)
+        
+        opt = minimize(spotRadius, [200], bounds = [(55,399)], args=(init))
+        f_optimal = opt.x
+            
+        ob = init(f_optimal)
+        l = ob.element_list[0]
+        
+        self.assertAlmostEqual(f_optimal, l.bfd(588)+l.centre[0]+0.5*l.thickness+l.w1, 1)  
+        
+
 # Plane Tests
 
 
