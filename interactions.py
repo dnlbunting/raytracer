@@ -1,11 +1,14 @@
 #!/usr/bin/env python
-from .utils import isVector, normalise,wavelengthToHex
+from .utils import isVector, normalise,wavelengthToHex, validDistance
 import numpy as np
 air = lambda l : 1.                                
-
+eps = np.finfo(np.float64).eps
 
 class ReflectionMixin(object):
     def _reflect(self, ray, n):
+        
+        d = self.distance(ray) 
+        p = ray.p + d*ray.k
         k_prime = ray.k - 2*np.dot(ray.k, n)*n                   
         ray.append(p, k_prime)
         ray.isTerminated = False
@@ -21,24 +24,25 @@ class RefractionMixin(object):
             defined by the geometry specific code the process is generic"""
         d = self.distance(ray) 
         c = -np.dot(n, ray.k) 
-        
+
         # Set up the oreintation of the interface
         #print "Normal = %s" %(str(n))
         if c > 0 :
-            print "Refracting n1 -> n2"
+            #print "Refracting n1 -> n2"
             # Ray is propagating n1 -> n2
-            if ray.n != self.n1(ray.wavelength):
-                print "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n1(ray.wavelength))
-                
+            if np.abs(ray.n - self.n1(ray.wavelength)) > eps :
+                raise Exception ("Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n1(ray.wavelength)))
             r = self.n1(ray.wavelength)/self.n2(ray.wavelength)    
-        elif c < 0:
-            print "Refracting n2 -> n1"
+            #print "r = %g / %g " % (self.n1(ray.wavelength), self.n2(ray.wavelength) )
             
+        elif c < 0:
+            #print "Refracting n2 -> n1"
             # Ray is propagating n2 -> n1
-            if ray.n != self.n2(ray.wavelength):
-                print "Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n2(ray.wavelength))
+            if np.abs(ray.n - self.n2(ray.wavelength)) > eps:
+                raise Exception ("Ray current refractive index %f does not match that of the interface %f"%(ray.n, self.n2(ray.wavelength)))
             
             r = self.n2(ray.wavelength)/self.n1(ray.wavelength)
+            #print "r = %g / %g " % (self.n2(ray.wavelength) ,self.n1(ray.wavelength))
             c = -c
             n = -n
 
@@ -54,7 +58,8 @@ class RefractionMixin(object):
             # Ray is refracted       
             k_prime = r*ray.k + (r*c - np.sqrt(1-(r**2)*(1-c**2)))*n   
             ray.append(ray.p + d*ray.k, k_prime)     
-            ray.n = ray.n = ray.n/r
+            #print "Medium changed from %g to %g" %(ray.n,ray.n/r )
+            ray.n =  ray.n/r
             
         ray.isTerminated = False  
                
