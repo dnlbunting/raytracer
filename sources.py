@@ -73,7 +73,7 @@ class SingleRay(Source):
 class Ray(object):
     """docstring for Ray"""
     
-    def __init__(self, p, k,wavelength):
+    def __init__(self, p, k, wavelength):
         super(Ray, self).__init__()
         
         self.vertices = isVector(p).reshape((1,3))
@@ -103,8 +103,8 @@ class Ray(object):
         self._n = new
         #print "ray.n = %s" %(self._n)
                         
-    def drawBench(self, ax=None):
-        """docstring for drawBench"""
+    def draw(self, ax=None):
+        """docstring for draw"""
         if ax == None:
             fig = plt.figure()
             ax = fig.add_axes([0.05,0.05, 0.9, 0.9])
@@ -116,4 +116,7 @@ class Ray(object):
         self.vertices = np.vstack((self.vertices, isVector(p)))
         self.k = isVector(k)
         #print "k = %s, p = %s" % (str(self.k), str(self.p))
-        
+    
+    def __str__(self):
+        s = "Ray:\nVertices: " + str(self.vertices) + "\nVector: " + str(self.k) + "\nMedium: " + str(self.n)
+        return s
