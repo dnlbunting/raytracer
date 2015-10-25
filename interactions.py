@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from .utils import isVector, normalise, wavelengthToHex, validDistance
+from .utils import isVector, normalise, wavelengthToHex
 import numpy as np
 air = lambda l: 1.
 eps = np.finfo(np.float64).eps

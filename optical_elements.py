@@ -5,7 +5,7 @@ from matplotlib.patches import Polygon
 from scipy.spatial import ConvexHull
 from mpl_toolkits.mplot3d import Axes3D
 
-from .utils import isVector, normalise, wavelengthToHex, validDistance
+from .utils import isVector, normalise, wavelengthToHex, validDistanceArray
 from .interactions import RefractionMixin, ReflectionMixin, AbsorptionMixin
 
 air = lambda l: 1.
@@ -63,17 +63,17 @@ class CompositeObject(OpticalElement):
             raise Exception("Component must be an optical element!")
 
         self.components.append(comp)
-
+        
     def distance(self, ray):
         """Distance of the composite is the min distance of its components"""
         d = np.array([s.distance(ray) for s in self.components])
-        d = validDistance(d)
+        d = validDistanceArray(d)
         return np.min(d)
 
     def propagate_ray(self, ray):
         """Pass on propagate_ray to the component closest to the ray"""
         d = np.array([s.distance(ray) for s in self.components])
-        d = validDistance(d)
+        d = validDistanceArray(d)
         return self.components[np.argmin(d)].propagate_ray(ray)
 
     def draw(self, ax=None):
@@ -128,7 +128,7 @@ class Cylidrical(OpticalElement):
 
         # Try the closest intersection first
         d = sorted(np.array([l1, l2]) / np.dot(ray.k, k))
-        d = validDistance(d)
+        d = validDistanceArray(d)
         if d[0] != float('inf') and np.abs(np.dot(self.centre - ray.p + d[0] * ray.k, self.L) / np.linalg.norm(self.L)**2) <= 1:
             return d[0]
 
@@ -232,7 +232,7 @@ class Spherical(OpticalElement):
 
         # Try the closest intersection first
         d = sorted([l1, l2])
-        d = validDistance(d)
+        d = validDistanceArray(d)
         if d[0] != float('inf') and self.isIntersect(ray.p + d[0] * ray.k - self.centre):
             return d[0]
         # Now try the further away one
@@ -298,32 +298,6 @@ class SphericalRefraction(Spherical, RefractionMixin):
         return self._refract(ray, n)
 
 
-class Parabolic(OpticalElement):
-
-    """docstring for Parabolic"""
-
-    def __init__(self, centre, height, a):
-        super(Parabolic, self).__init__(centre)
-        self.height = height
-        self.a = a
-
-    def draw(self, ax=None):
-        """docstring for draw"""
-        ax = super(Parabolic, self).draw(ax)
-        y = np.linspace(-self.height, self.height, 100)
-        x = [self.a * t**2 for t in y]
-        points = np.array([[a, b] for a, b in zip(x, y)]) + self.centre[:2]
-        poly = Polygon(points, False, facecolor='none')
-        ax.add_patch(poly)
-
-    def distance(self):
-        """docstring for distance"""
-        pass
-
-    def propagate_ray(self):
-        pass
-
-
 # Planar Objects
 class Plane(OpticalElement):
 
@@ -355,19 +329,20 @@ class Plane(OpticalElement):
         ax = super(Plane, self).draw(ax)
         poly = Polygon([x[:2] for x in self.points], True, facecolor='none')
         ax.add_patch(poly)
-
+    
     def distance(self, ray):
         """Distance from ray to self along the ray's path"""
 
         r = self.centre - ray.p
-
-        if np.abs(np.dot(self.normal, r)) < eps or np.abs(np.dot(ray.k, self.normal)) < eps:
+        top = np.dot(self.normal, r)
+        bottom = np.dot(ray.k, self.normal)
+        if np.abs(top) < eps or np.abs(bottom) < eps:
             return float('inf')
 
-        d = np.dot(self.normal, r) / np.dot(ray.k, self.normal)
+        d = top / bottom
         p = ray.p + d * ray.k
         d = d if self.isIntersect(p) else float('inf')
-        return validDistance(d)
+        return d
 
     def isIntersect(self, p):
         """Decides if p is in the plane or not by projecting the intersection point
@@ -467,7 +442,7 @@ class Screen(Plane):
             associated mpl figure"""
         d = self.distance(ray)
         ray.append(ray.p + d * ray.k, ray.k)
-        ray.isTerminated = True
+        ray.isTerminated = False
 
         alpha = np.dot(self.a, (ray.p - self.centre)) / np.linalg.norm(self.a)
         beta = np.dot(self.b, (ray.p - self.centre)) / np.linalg.norm(self.b)
@@ -491,3 +466,45 @@ class Screen(Plane):
         
         for p in self.pixels:
             self.ax.scatter(p[0], p[1], c=p[2], marker='.', lw=0)
+
+
+class Mask(Plane):
+
+    """"""
+
+    def __init__(self, centre,  a, b, mask):
+        super(Mask, self).__init__(centre,  a, b)
+
+        self.pixels = []
+        self.mask = np.load(mask)
+        self.w = 0.5*self.mask.shape[0]
+        self.h = 0.5*self.mask.shape[1]
+        self.border = 100
+    
+    def propagate_ray(self, ray):
+        """"""
+        d = self.distance(ray)
+        ray.append(ray.p + d * ray.k, ray.k)
+
+        # Plane orthogonal coordinates, rescale into pixels
+        alpha = np.dot(self.a, (ray.p - self.centre)) / np.linalg.norm(self.a)**2
+        beta = np.dot(self.b, (ray.p - self.centre)) / np.linalg.norm(self.b)**2
+        
+        alpha = (self.border+self.w) * 2*alpha
+        beta = (self.border+self.h) * 2*beta
+        if np.abs(alpha) > self.w or np.abs(beta) > self.h:
+            # Outside of image area, terminate
+            ray.isTerminated = True
+            return ray
+
+        elif self.mask[self.w + np.floor(alpha), self.h+np.floor(beta)] > 0 :
+            ray.isTerminated = False
+            return ray
+        else :
+            ray.isTerminated = True
+            return ray
+        
+
+        return ray
+
+

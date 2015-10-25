@@ -2,7 +2,6 @@
 
 import numpy as np
 
-
 def isVector(x):
     if isinstance(x, (list, tuple, np.ndarray)) and len(x) != 3:
         raise Exception("Invalid 3d vector")
@@ -88,15 +87,10 @@ def wavelengthToHex(wl):
     return (R, G, B)
 
 
-def validDistance(d):
+#@jit(cache=True)
+def validDistanceArray(d):
     """Masks potential invalid distances with +inf"""
-    if isinstance(d, (list, np.ndarray)):
-        d = np.array(d)
-        mask = np.logical_or(np.logical_or(np.isnan(d), np.isclose(d, 0.)), d < 0)
-        d[mask] = float('inf')
-        return d
-    else:
-        if np.isnan(d) or np.isclose(d, 0.) or d < 0:
-            return float('inf')
-        else:
-            return d
+    d = np.array(d)
+    mask = np.logical_or(np.logical_or(np.isnan(d), np.isclose(d, 0.)), d < 0)
+    d[mask] = float('inf')
+    return d
