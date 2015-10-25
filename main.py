@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from .optical_elements import *
 from .sources import Source, SingleRay, CollimatedBeam
 from .lenses import *
-from .utils import validDistance
+from .utils import validDistanceArray
 
 eps = np.finfo(np.float64).eps
 
@@ -51,6 +51,7 @@ class OpticalBench(object):
         self.interactors = self.boundary_list + self.screen_list + self.element_list
 
         for source in self.source_list:
+            source._reset()
             for ray in source:
                 i = 0
                 while ray.isTerminated is False:
@@ -76,7 +77,7 @@ class OpticalBench(object):
         if self.verbose:
             print "Distances: " + str(distances)
         # Assert that ditnaces must be >= 0 and not nan
-        distances = validDistance(distances)
+        distances = validDistanceArray(distances)
         return self.interactors[np.argmin(distances)].propagate_ray(ray)
 
     def add(self, element):

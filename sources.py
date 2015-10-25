@@ -20,7 +20,10 @@ class Source(object):
     def __getitem__(self, key):
         """Allows for direct access and iteration over the rays emitted from this source"""
         return self.ray_list[key]
-
+    def _reset(self):
+        """docstring for _reset"""
+        self.ray_list = self._initRays()
+        
     @abstractmethod
     def _initRays(self):
         pass
@@ -60,6 +63,8 @@ class CollimatedBeam(Source):
             return [Ray(p, self.direction, np.random.randint(400, 700)) for p in pos]
         else:
             return [Ray(p, self.direction, self.wavelength) for p in pos]
+    
+
 
 
 class SingleRay(Source):
