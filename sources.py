@@ -8,7 +8,12 @@ air = lambda l: 1.
 
 class Source(object):
 
-    """docstring for Source"""
+    """ABC defining common interface for all source like objects
+        
+        ray_list - stores all rays associated with this source, exposed for direct access/iteration
+        _initRays - populates ray_list 
+        _reset - re-populates ray_list """
+        
     __metaclass__ = ABCMeta
 
     def __init__(self, centre):
@@ -20,8 +25,9 @@ class Source(object):
     def __getitem__(self, key):
         """Allows for direct access and iteration over the rays emitted from this source"""
         return self.ray_list[key]
+    
     def _reset(self):
-        """docstring for _reset"""
+        """Returns source to its original state ie before call to Render()"""
         self.ray_list = self._initRays()
         
     @abstractmethod
@@ -31,7 +37,13 @@ class Source(object):
 
 class CollimatedBeam(Source):
 
-    """docstring for CollimatedBeam"""
+    """A beam of collimated light
+    
+        centre -  centre point of the beam 
+        direction -  direction of propagation vector
+        radius  - radius of the beam 
+        N - number of rings
+        wavelength -  wavelength in nm, can be 'white' to produce beam with random colored rays """
 
     def __init__(self, centre, direction, radius, N, wavelength):
         super(CollimatedBeam, self).__init__(centre)
@@ -57,7 +69,6 @@ class CollimatedBeam(Source):
         self.ray_list = self._initRays()
 
     def _initRays(self):
-        """docstring for _initRays"""
         pos = [self.centre + self.u * r * np.cos(t) + self.v * r * np.sin(t) for r, t in unifDisk(self.N, self.radius, 6)]
         if self.wavelength == 'white':
             return [Ray(p, self.direction, np.random.randint(400, 700)) for p in pos]
@@ -69,7 +80,11 @@ class CollimatedBeam(Source):
 
 class SingleRay(Source):
 
-    """docstring for SingleRay"""
+    """Wrapper for a  single ray object
+    
+       centre -  centre point of the beam 
+       direction -  direction of propagation vector
+       wavelength -  wavelength in nm"""
 
     def __init__(self, centre, direction,  wavelength):
         super(SingleRay, self).__init__(centre)
@@ -84,7 +99,12 @@ class SingleRay(Source):
 
 class PointSource(Source):
 
-    """docstring for PointSource"""
+    """Point source, emits rays uniformly in all directions
+       
+       centre -  centre point of the beam 
+       direction -  direction of propagation vector
+       N - angular number density of rays (rays/pi)
+       wavelength -  wavelength in nm"""
 
     def __init__(self, centre, N,  wavelength):
         super(PointSource, self).__init__(centre)
@@ -93,28 +113,34 @@ class PointSource(Source):
         self.ray_list = self._initRays()
 
     def _initRays(self):
-        """docstring for _initRays"""
         K = [[np.sin(t)*np.cos(p), np.sin(t)*np.sin(p), np.cos(t)] 
                 for t in np.linspace(0,np.pi, self.N) 
-                for p in np.linspace(0,2*np.pi, self.N)]
+                for p in np.linspace(0,2*np.pi, 2*self.N)]
         return [Ray(self.centre, k, self.wavelength) for k in K] 
 
 
 class ConicalSource(Source):
 
-    """docstring for ConicalSource"""
+    """ConicalSource, emits rays from centre point so that they uniformly cover 
+        a disk of radius r,  1 unit away from centre in the direction n
+        
+        centre -  centre point of the beam 
+        r - radius of the disk the rays cover 1 unit away from the centre
+        direction -  direction of the centre propagation vector
+        N -  number  of rays
+        wavelength -  wavelength in nm"""
 
-    def __init__(self, centre, r,n, N,  wavelength):
+    def __init__(self, centre, r, direction, N,  wavelength):
         super(ConicalSource, self).__init__(centre)
         self.wavelength = wavelength
         self.r = r
-        self.n = isVector(n)
+        self.direction = isVector(direction)
         self.N = N
         self.ray_list = self._initRays()
 
     def _initRays(self):
         """docstring for _initRays"""
-        K =[self.n + np.array([0, r * np.cos(t), r * np.sin(t)]) for r, t in unifDisk(self.N, self.r, 6)]
+        K =[self.direction + np.array([0, r * np.cos(t), r * np.sin(t)]) for r, t in unifDisk(self.N, self.r, 6)]
         if self.wavelength == 'white':
             return [Ray(self.centre, k, np.random.randint(400, 700)) for k in K]
         else:                        
@@ -123,7 +149,7 @@ class ConicalSource(Source):
         
 class Ray(object):
 
-    """docstring for Ray"""
+    """Ray object"""
 
     def __init__(self, p, k, wavelength):
         super(Ray, self).__init__()
@@ -142,6 +168,7 @@ class Ray(object):
 
     @property
     def k(self):
+        """The current direction vector of the ray"""
         return self._k
 
     @k.setter
@@ -151,6 +178,7 @@ class Ray(object):
 
     @property
     def n(self):
+        """The refractive index of the medium the ray is currently travelling in"""
         return self._n
 
     @n.setter
@@ -159,7 +187,7 @@ class Ray(object):
         # print "ray.n = %s" %(self._n)
 
     def draw(self, ax=None):
-        """docstring for draw"""
+        """Draws the xy projection of the rays path"""
         if ax == None:
             fig = plt.figure()
             ax = fig.add_axes([0.05, 0.05, 0.9, 0.9])
