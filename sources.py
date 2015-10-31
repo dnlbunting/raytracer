@@ -82,16 +82,54 @@ class SingleRay(Source):
         """docstring for _initRays"""
         return([Ray(self.centre, self.direction, self.wavelength)])
 
+class PointSource(Source):
 
+    """docstring for PointSource"""
+
+    def __init__(self, centre, N,  wavelength):
+        super(PointSource, self).__init__(centre)
+        self.wavelength = wavelength
+        self.N = N
+        self.ray_list = self._initRays()
+
+    def _initRays(self):
+        """docstring for _initRays"""
+        K = [[np.sin(t)*np.cos(p), np.sin(t)*np.sin(p), np.cos(t)] 
+                for t in np.linspace(0,np.pi, self.N) 
+                for p in np.linspace(0,2*np.pi, self.N)]
+        return [Ray(self.centre, k, self.wavelength) for k in K] 
+
+
+class ConicalSource(Source):
+
+    """docstring for ConicalSource"""
+
+    def __init__(self, centre, r,n, N,  wavelength):
+        super(ConicalSource, self).__init__(centre)
+        self.wavelength = wavelength
+        self.r = r
+        self.n = isVector(n)
+        self.N = N
+        self.ray_list = self._initRays()
+
+    def _initRays(self):
+        """docstring for _initRays"""
+        K =[self.n + np.array([0, r * np.cos(t), r * np.sin(t)]) for r, t in unifDisk(self.N, self.r, 6)]
+        if self.wavelength == 'white':
+            return [Ray(self.centre, k, np.random.randint(400, 700)) for k in K]
+        else:                        
+            return [Ray(self.centre, k, self.wavelength) for k in K]
+        
+        
 class Ray(object):
 
     """docstring for Ray"""
 
     def __init__(self, p, k, wavelength):
         super(Ray, self).__init__()
-
+        self.k_history = []
         self.vertices = isVector(p).reshape((1, 3))
-        self.k = isVector(k)
+        self.k = isVector(k)        
         self.wavelength = wavelength
         self.isTerminated = False
         self._n = air(self.wavelength)  # Index of refraction of the medium currently in
@@ -108,6 +146,7 @@ class Ray(object):
 
     @k.setter
     def k(self, new):
+        self.k_history.append(normalise(new))
         self._k = normalise(new)
 
     @property

@@ -107,7 +107,7 @@ class LensTest(unittest.TestCase):
         ob = init(f_optimal)
         l = ob.element_list[0]
         
-        self.assertAlmostEqual(f_optimal, l.bfd(588)+l.centre[0]+0.5*l.thickness+l.w1, 1)  
+        self.assertAlmostEqual(f_optimal, l.bfd(588)+l.centre[0]+0.5*l.thickness+l.w2, 1)
         
 
 # Plane Tests
