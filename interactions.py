@@ -4,11 +4,15 @@ import numpy as np
 air = lambda l: 1.
 eps = np.finfo(np.float64).eps
 
+"""This module contains Mixin classes designed to be subclassed by objects alongside one of
+   the geometry ABCs in optical_elements in order to provide optical interactions requiring 
+    only the incident normal."""
+
 
 class ReflectionMixin(object):
-
+    """ReflectionMixin provides geometry indenpendent reflection"""
     def _reflect(self, ray, n):
-
+        '''Reflects an incident ray, ray in the plane with normal n'''
         d = self.distance(ray)
         p = ray.p + d * ray.k
         k_prime = ray.k - 2 * np.dot(ray.k, n) * n
@@ -19,14 +23,18 @@ class ReflectionMixin(object):
 
 class RefractionMixin(object):
 
-    """docstring for RefractionMixin"""
+    """RefractionMixin provide geometry independent refraction"""
 
     def __init__(self):
         super(RefractionMixin, self).__init__()
 
     def _refract(self, ray, n):
-        """The actual refraction/TIR is performed here as once the normal n has been
-            defined by the geometry specific code the process is generic"""
+        """Refracts an incident ray with a plane with normal n.
+            Requires that the object subclassing this mixin has members n1 and n2, where n is
+            taken to point from n2 -> n1.
+            Direction of the refraction is decided automatically based on the angle between ray.k and n, 
+            and we assert that this is in agreement with the medium information carried by the ray object """
+        
         d = self.distance(ray)
         c = -np.dot(n, ray.k)
 
@@ -71,9 +79,8 @@ class RefractionMixin(object):
 
 
 class AbsorptionMixin(object):
-
+    """Terminates rays"""
     def _absorb(self, ray):
-        """docstring for _absorb"""
         d = self.distance(ray)
         ray.append(ray.p + d * ray.k, ray.k)
         ray.isTerminated = True
