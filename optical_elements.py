@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 from scipy.spatial import ConvexHull
 from mpl_toolkits.mplot3d import Axes3D
-
+from functools import partial
+from itertools import chain
 from .utils import isVector, normalise, wavelengthToHex, validDistanceArray
 from .interactions import RefractionMixin, ReflectionMixin, AbsorptionMixin
 
@@ -25,11 +26,11 @@ class OpticalElement(object):
         implementations to handle setting up new axes if none are provided"""
     __metaclass__ = ABCMeta
 
-    def __init__(self, centre):
+    def __init__(self, centre, draw_kwargs={}):
         super(OpticalElement, self).__init__()
-
+        self.draw_kwargs = {'closed':True, 'facecolor':'none'} if draw_kwargs == {} else draw_kwargs 
         self.centre = isVector(centre)
-
+        self.polygon = partial(Polygon, **self.draw_kwargs)
     @abstractmethod
     def distance(self):
         pass
@@ -37,6 +38,7 @@ class OpticalElement(object):
     @abstractmethod
     def propagate_ray(self):
         pass
+    
 
     @abstractmethod
     def draw(self, ax=None):
@@ -53,7 +55,7 @@ class CompositeObject(OpticalElement):
 
     """docstring for CompositeObject"""
 
-    def __init__(self, centre):
+    def __init__(self, centre, draw_kwargs={}):
         super(CompositeObject, self).__init__(centre)
         self.components = []
 
@@ -89,8 +91,9 @@ class Cylidrical(OpticalElement):
 
     """docstring for Cylidrical"""
 
-    def __init__(self, centre, L, r):
-        super(Cylidrical, self).__init__(centre)
+    def __init__(self, centre, L, r, draw_kwargs = {}):
+        default = {'closed':True, 'facecolor':'none'}
+        super(Cylidrical, self).__init__(centre, {k:v for k,v in default.items()+draw_kwargs.items()})
         self.L = isVector(L)
         if L[2] != 0:
             raise Exception("Only cylinders in the xy plane are currently supported :(")
@@ -103,9 +106,12 @@ class Cylidrical(OpticalElement):
 
     def draw(self, ax=None):
         ax = super(Cylidrical, self).draw(ax)
-        poly = Polygon([x[:2] for x in self.points], True, facecolor='none')
+        poly = self.polygon([x[:2] for x in [self.points[0], self.points[3]]])
         ax.add_patch(poly)
-
+        
+        poly = self.polygon([x[:2] for x in [self.points[1], self.points[2]]])
+        ax.add_patch(poly)
+        
     def distance(self, ray):
 
         r_prime = self.centre - ray.p
@@ -143,8 +149,8 @@ class CylindricalRefraction(Cylidrical, RefractionMixin):
 
     """docstring for CylindricalRefraction"""
 
-    def __init__(self, centre, L, r, n1, n2):
-        super(CylindricalRefraction, self).__init__(centre, L, r)
+    def __init__(self, centre, L, r, n1, n2, draw_kwargs={}):
+        super(CylindricalRefraction, self).__init__(centre, L, r, draw_kwargs)
         self.n1 = n1
         self.n2 = n2
 
@@ -162,8 +168,8 @@ class CylindricalWall(Cylidrical, AbsorptionMixin):
 
     """docstring for CylindricalWall"""
 
-    def __init__(self, centre, L, r):
-        super(CylindricalWall, self).__init__(centre, L, r)
+    def __init__(self, centre, L, r, draw_kwargs={}):
+        super(CylindricalWall, self).__init__(centre, L, r, draw_kwargs)
 
     def propagate_ray(self, ray):
         return self._absorb(ray)
@@ -174,9 +180,8 @@ class Spherical(OpticalElement):
 
     """docstring for Spherical"""
 
-    def __init__(self, centre, R, theta=None, height=None):
-        super(Spherical, self).__init__(centre)
-
+    def __init__(self, centre, R, theta=None, height=None, draw_kwargs={}):
+        super(Spherical, self).__init__(centre, draw_kwargs)
         # scalar radius
         self.r = np.linalg.norm(R)
         # Unit vector defining radial direction
@@ -207,7 +212,7 @@ class Spherical(OpticalElement):
 
             T = np.linspace(self.t_0 - self.theta, self.t_0 + self.theta, 100)
             points = [[self.r * np.cos(t) + self.centre[0], self.r * np.sin(t) + self.centre[1]] for t in T]
-            poly = Polygon(points, True, facecolor='none')
+            poly = self.polygon(points)
             ax.add_patch(poly)
 
         # TODO Make it so that the spherical can have a z comp
@@ -253,8 +258,8 @@ class SphericalWall(Spherical, AbsorptionMixin):
 
     """A spherical with total absorption"""
 
-    def __init__(self, centre,  R, theta=None, height=None):
-        super(SphericalWall, self).__init__(centre, R, theta, height)
+    def __init__(self, centre,  R, theta=None, height=None, draw_kwargs={}):
+        super(SphericalWall, self).__init__(centre, R, theta, height, draw_kwargs)
 
     def propagate_ray(self, ray):
         return self._absorb(ray)
@@ -264,8 +269,8 @@ class SphericalMirror(Spherical, ReflectionMixin):
 
     """A totally reflective spherical (both sides)"""
 
-    def __init__(self, centre,  R, theta=None, height=None):
-        super(SphericalMirror, self).__init__(centre, R, theta, height)
+    def __init__(self, centre,  R, theta=None, height=None, draw_kwargs={}):
+        super(SphericalMirror, self).__init__(centre, R, theta, height, draw_kwargs)
 
     def propagate_ray(self, ray):
         """Implements propagate_ray for Wall by terminating ray"""
@@ -283,8 +288,8 @@ class SphericalRefraction(Spherical, RefractionMixin):
 
     """A spherical with medium on one side and with air on the other"""
 
-    def __init__(self, centre,  R, n1, n2, theta=None, height=None):
-        super(SphericalRefraction, self).__init__(centre, R, theta, height)
+    def __init__(self, centre,  R, n1, n2, theta=None, height=None, draw_kwargs={}):
+        super(SphericalRefraction, self).__init__(centre, R, theta, height, draw_kwargs)
         self.n1 = n1
         self.n2 = n2
 
@@ -308,8 +313,8 @@ class Plane(OpticalElement):
         a,b - Vectors describing the distance from the center to each edge,
               *must be orthogonal*. Side lengths are then 2a, 2b"""
 
-    def __init__(self, centre,  a, b):
-        super(Plane, self).__init__(centre)
+    def __init__(self, centre,  a, b, draw_kwargs={}):
+        super(Plane, self).__init__(centre, draw_kwargs)
 
         assert np.dot(a, b) < eps, "Vectors must be orthogonal"
 
@@ -327,7 +332,7 @@ class Plane(OpticalElement):
     def draw(self, ax=None):
         """Draws a projection of the object on the xy plane"""
         ax = super(Plane, self).draw(ax)
-        poly = Polygon([x[:2] for x in self.points], True, facecolor='none')
+        poly = self.polygon([x[:2] for x in self.points])
         ax.add_patch(poly)
     
     def distance(self, ray):
@@ -360,8 +365,8 @@ class PlaneRefraction(Plane, RefractionMixin):
          and n2 on the other. The normal vector is defined to point towards
          the medium with n1"""
 
-    def __init__(self, centre,  a, b, n1, n2):
-        super(PlaneRefraction, self).__init__(centre,  a, b)
+    def __init__(self, centre,  a, b, n1, n2, draw_kwargs={}):
+        super(PlaneRefraction, self).__init__(centre,  a, b, draw_kwargs)
         self.n1 = n1
         self.n2 = n2
 
@@ -375,8 +380,8 @@ class Mirror(Plane, ReflectionMixin):
 
     """A totally reflective plane (both sides)"""
 
-    def __init__(self, centre,  a, b):
-        super(Mirror, self).__init__(centre,  a, b)
+    def __init__(self, centre,  a, b, draw_kwargs={}):
+        super(Mirror, self).__init__(centre,  a, b, draw_kwargs)
 
     def propagate_ray(self, ray):
         """Implements propagate_ray for Mirror by reflecting the wavevector of the ray
@@ -390,8 +395,8 @@ class Wall(Plane, AbsorptionMixin):
 
     """A plane with total absorption"""
 
-    def __init__(self, centre,  a, b):
-        super(Wall, self).__init__(centre,  a, b)
+    def __init__(self, centre,  a, b, draw_kwargs={}):
+        super(Wall, self).__init__(centre,  a, b,draw_kwargs)
 
     def propagate_ray(self, ray):
         """Implements propagate_ray for Wall by terminating ray"""
@@ -402,8 +407,8 @@ class Cube(CompositeObject):
 
     """docstring for Cube"""
 
-    def __init__(self, centre,  a, b, c, ref_index):
-        super(Cube, self).__init__(centre)
+    def __init__(self, centre,  a, b, c, ref_index, draw_kwargs={}):
+        super(Cube, self).__init__(centre, draw_kwargs)
         self.a = isVector(a)
         self.b = isVector(b)
         self.c = isVector(c)
@@ -431,8 +436,8 @@ class Screen(Plane):
 
     """An output screen, records all incident beams as pixels and renders them"""
 
-    def __init__(self, centre,  a, b, term = False):
-        super(Screen, self).__init__(centre,  a, b)
+    def __init__(self, centre,  a, b, term = False, draw_kwargs={}):
+        super(Screen, self).__init__(centre,  a, b, draw_kwargs)
         self.term = term
         self.pixels = []
 
@@ -473,8 +478,8 @@ class Mask(Plane):
 
     """"""
 
-    def __init__(self, centre,  a, b, mask):
-        super(Mask, self).__init__(centre,  a, b)
+    def __init__(self, centre,  a, b, mask, draw_kwargs={}):
+        super(Mask, self).__init__(centre,  a, b, draw_kwargs)
 
         self.pixels = []
         self.mask = np.load(mask)
