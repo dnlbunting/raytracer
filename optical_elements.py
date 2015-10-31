@@ -431,9 +431,9 @@ class Screen(Plane):
 
     """An output screen, records all incident beams as pixels and renders them"""
 
-    def __init__(self, centre,  a, b):
+    def __init__(self, centre,  a, b, term = False):
         super(Screen, self).__init__(centre,  a, b)
-
+        self.term = term
         self.pixels = []
 
     def propagate_ray(self, ray):
@@ -442,7 +442,8 @@ class Screen(Plane):
             associated mpl figure"""
         d = self.distance(ray)
         ray.append(ray.p + d * ray.k, ray.k)
-        ray.isTerminated = False
+        if self.term:
+            ray.isTerminated = True
 
         alpha = np.dot(self.a, (ray.p - self.centre)) / np.linalg.norm(self.a)
         beta = np.dot(self.b, (ray.p - self.centre)) / np.linalg.norm(self.b)
