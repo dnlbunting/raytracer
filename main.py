@@ -15,7 +15,7 @@ class OpticalBench(object):
 
     """docstring for OpticalBench"""
 
-    def __init__(self, x, y, z, verbose=False):
+    def __init__(self, x, y, z, verbose=False, render_limit=20):
         super(OpticalBench, self).__init__()
 
         self.x = x
@@ -29,7 +29,7 @@ class OpticalBench(object):
         self.screen_list = []
         self.element_list = []
 
-        self.render_limit = 10
+        self.render_limit = render_limit
 
     def _makeBoundaries(self):
         """docstring for makeBoundaries"""
