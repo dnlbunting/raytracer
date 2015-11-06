@@ -146,15 +146,27 @@ class BiConvex(CompositeObject):
 
 class BiConcave(CompositeObject):
 
-    """BiConcave lens - Very untested"""
-
-    def __init__(self, centre, height, R1, R2, thickness, ref_index):
+    """BiConvex lens. Untested!
+       Both r1 and r2 are assumed to be positive and the surface with r1 is facing the source
+    
+        Params:
+        centre - Centre of the object
+        height -  height of the lens
+        r1 - Scalar radius of curvature of the first surface (>0)
+        r2 - Scalar radius of curvature of the second surface (>0)        
+        R - Vector defining the optical axis of the lens
+        thickness - thickness of the lens, excluding the thickness due to the curved surfaces
+        ref_index - refractive index as function of wavelength. For constant use eg lambda l : 1.5"""
+        
+    def __init__(self, centre, height, r1, r2, R, thickness, ref_index):
         super(BiConcave, self).__init__(centre)
         self.height = height
-        self.radius1 = np.linalg.norm(R1)
-        self.R1 = normalise(isVector(R1))
-        self.radius2 = np.linalg.norm(R2)
-        self.R2 = normalise(isVector(R2))
+    
+        self.radius1 = np.abs(r1)
+        self.R1 = -1.*normalise(isVector(R))
+        self.radius2 = np.abs(r2)
+        self.R2 = normalise(isVector(R))
+        
         self.ref_index = ref_index
         self.w1 = self.radius1 - np.sqrt(self.radius1**2 - self.height**2)
         self.w2 = self.radius2 - np.sqrt(self.radius2**2 - self.height**2)
@@ -162,13 +174,13 @@ class BiConcave(CompositeObject):
         self.w = np.mean(self.w1 + self.w2)
 
         self.add(SphericalRefraction(self.centre + (self.radius1 - 0.5 * self.w + 0.5 * self.thickness) * self.R1,
-                                     -self.radius1 * self.R1, height=self.height, n1=air, n2=ref_index))
+                                     -self.radius1 * self.R1, height=self.height, n1=ref_index, n2=air))
 
         self.add(CylindricalRefraction(self.centre + self.R1 * 0.5 * (self.w1 - self.w2), self.R1 * self.thickness * 0.5,
                                        self.height, air, self.ref_index))
 
         self.add(SphericalRefraction(self.centre + (self.radius2 - 0.5 * self.w + 0.5 * self.thickness) * self.R2,
-                                     -self.radius2 * self.R2, height=self.height, n1=air, n2=ref_index))
+                                     -self.radius2 * self.R2, height=self.height, n1=ref_index, n2=air))
 
     def lensmaker(self, wl=500):
         return lensmakers(-self.radius1, 1. * self.radius2, self.ref_index(wl), self.thickness + self.w1 + self.w2) + self.centre[0]
