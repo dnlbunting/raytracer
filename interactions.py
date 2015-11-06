@@ -41,28 +41,27 @@ class RefractionMixin(object):
         # Set up the oreintation of the interface
         # print "Normal = %s" %(str(n))
         if c > 0:
-            # print "Refracting n1 -> n2"
+            #print "Refracting n1 -> n2"
             # Ray is propagating n1 -> n2
-            if np.abs(ray.n - self.n1(ray.wavelength)) > eps:
+            if not np.isclose(ray.n ,  self.n1(ray.wavelength)):
                 raise Exception("Ray current refractive index %f does not match that of the interface %f" % (ray.n, self.n1(ray.wavelength)))
             r = self.n1(ray.wavelength) / self.n2(ray.wavelength)
-            # print "r = %g / %g " % (self.n1(ray.wavelength), self.n2(ray.wavelength) )
+
 
         elif c < 0:
-            # print "Refracting n2 -> n1"
+            #print "Refracting n2 -> n1"
             # Ray is propagating n2 -> n1
-            if np.abs(ray.n - self.n2(ray.wavelength)) > eps:
+            if  not np.isclose(ray.n ,  self.n2(ray.wavelength)):
                 raise Exception("Ray current refractive index %f does not match that of the interface %f" % (ray.n, self.n2(ray.wavelength)))
 
             r = self.n2(ray.wavelength) / self.n1(ray.wavelength)
-            # print "r = %g / %g " % (self.n2(ray.wavelength) ,self.n1(ray.wavelength))
             c = -c
             n = -n
 
         else:
             raise Exception("A fatal error has occurred - Ray is parallel to the interface")
-
-        if 1 - (r**2) * (1 - c**2) < 0:
+            
+        if (1. - (r**2) * (1. - c**2)) < 0:
             # Ray is TIR
             k_prime = ray.k - 2 * np.dot(ray.k, n) * n
             ray.append(ray.p + d * ray.k, k_prime)

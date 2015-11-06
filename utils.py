@@ -9,7 +9,7 @@ def isVector(x):
 
 
 def normalise(n):
-    """docstring for normalise"""
+    """Returns the n normalised"""
     if np.linalg.norm(n) == 0:
         raise Exception("Attempt to normalise 0 vector")
     return np.array(n) / np.linalg.norm(n)
@@ -39,14 +39,20 @@ def unifDisk(n, rmax, m):
 
 
 def rotPlane(a, b, t):
+    """Helper function to create orthogonal sets of basis vectors for a plane with 
+        sides a,b at angle t to the x axis"""
     return ([a * np.cos(t), a * np.sin(t), 0], [0, 0, b])
 
 
 def rotCube(a, b, c, t):
+    """Helper function to create orthogonal sets of basis vectors for a cube with 
+        sides a,b,c at angle t to the x axis"""
     return ([a * np.cos(t), a * np.sin(t), 0], [b * np.cos(t), -b * np.sin(t), 0],  [0, 0, c])
 
 
 def wavelengthToHex(wl):
+    """Calculates an approximation to the RGB representation of a ray with
+        a given wavelength"""
     if (wl >= 380 and wl < 440):
         R = -1 * (wl - 440.) / (440. - 380.)
         G = 0

@@ -13,9 +13,22 @@ eps = np.finfo(np.float64).eps
 
 class OpticalBench(object):
 
-    """docstring for OpticalBench"""
+    """OpticalBench is the main class of the raytracer module. To create a simulation generally
+    create an OpticalBench object and add sources/optical elements to it then call Render() and draw()"""
 
     def __init__(self, x, y, z, verbose=False, render_limit=20):
+        '''
+        Creates an OpticalBench object to which optical elements can be added to build up 
+        a simulation scene
+        
+        x,y,z -  The dimensions of the scene
+        verbose - Print each ray during the render loop - default:False
+        render_limit - Maximum number of times to trace a single ray. Used to prevent 
+                       infinite loops ie two mirrors facing each other. Throws a RenderLimitExceeded
+                       exception if violated
+                    
+        
+        '''
         super(OpticalBench, self).__init__()
 
         self.x = x
@@ -32,7 +45,7 @@ class OpticalBench(object):
         self.render_limit = render_limit
 
     def _makeBoundaries(self):
-        """docstring for makeBoundaries"""
+        """Private function. Builds the edges of the simulation area"""
 
         x = self.x
         y = self.y
@@ -67,7 +80,7 @@ class OpticalBench(object):
                     print "*" * 30
 
     def _trace(self, ray):
-        """Computes the distance along the ray to each interactor
+        """Private. Computes the distance along the ray to each interactor
             then propagates the ray through the one it hits first"""
 
         distances = []
@@ -76,7 +89,7 @@ class OpticalBench(object):
         distances = np.array(distances)
         if self.verbose:
             print "Distances: " + str(distances)
-        # Assert that ditnaces must be >= 0 and not nan
+        # Assert that distances must be >= 0 and not nan
         distances = validDistanceArray(distances)
         return self.interactors[np.argmin(distances)].propagate_ray(ray)
 
@@ -92,7 +105,8 @@ class OpticalBench(object):
             raise Exception("Object must be subclassed from OpticalElement or Source")
 
     def draw(self, ax=None):
-        """docstring for draw"""
+        """Draws a xy projection of the OpticalBench. Generally call Render() first to
+            populate with rays, although can be called before render to check the placement of objects etc"""
         if ax == None:
             fig = plt.figure()
             ax = fig.add_axes([0.05, 0.05, 0.9, 0.9])
@@ -116,34 +130,4 @@ class OpticalBench(object):
 
         return ax
 
-glass = lambda l: 1.5046 + 4200. / l**2
-water = lambda l: 1.319 + 6878. / l**2
-air = lambda l: 1.
 
-
-def test():
-    ob = OpticalBench(0.5, 0.5, .5)
-    ob.addSource(CollimatedBeam([0.0, 0.5, 0.5], [1, 0, 0], 0.001, 35, 'white'))
-    ob.addElement(BiConvex([0.2, 0.5, 0.5], 0.25, [-1., 0, 0], 0.001, glass))
-    ob.addElement(Screen([.85, 0.5, 0.5], [0, 0.75, 0], [0, 0, 0.5]))
-
-    # for i in np.linspace(0,.99,30):
-    #    ob.addSource(SingleRay([0.1, i, 0.5], [1,0,0], 500))
-    #ob.addElement(PlaneRefraction([0.55, 0.5, 0.5], [0,-.2,0],[0,0,0.2], glass,air))
-    #ob.addElement(Cube([0.55, 0.3, 0.5], [0.1, 0,0],[0,0.1,0],[0,0,0.1], water))
-
-    #ob.addSource(CollimatedBeam([0.1, 0.1, 0.5], [1,.5,0], 0.001, 25, "white"))
-    #ob.addElement(CylindricalRefraction([0.5, 0.5, 0.5], L=[0.2,0,0], r=0.1, n1=air, n2=glass))
-    #ob.addElement(SphericalRefraction([0.5, 0.5, 0.5], [0.2,0,0],theta=np.pi, n1=air, n2=water))
-    #ob.addElement(Mirror([0.5, 0.5, 0.5], [0,0.1,0],[0,0,0.2]))
-    ##ob.addElement(Mirror([0.2, 0.7, 0.5], [0,0,.1],[0,.1,0]))
-
-    #ob.addElement(PlaneRefraction([0.55, 0.6, 0.5], [0,0,0.2], [.3,0,0], air, glass))
-    #ob.addElement(PlaneRefraction([0.55, 0.4, 0.5], [.3,0,0],[0,0,0.2], air,glass))
-    #ob.addElement(PlanoConvex([0.5,0.5,0.5], 0.2, [-0.3,0,0], 0.05, glass))
-    #ob.addElement(SphericalRefraction([1, 0.5, 0.5], [-0.3,0,0],theta=0.5, n1=air, n2=glass))
-
-    # return ob
-    ob.Render()
-    ob.draw()
-    return ob

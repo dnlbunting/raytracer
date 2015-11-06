@@ -12,7 +12,6 @@ from .interactions import RefractionMixin, ReflectionMixin, AbsorptionMixin
 air = lambda l: 1.
 eps = np.finfo(np.float64).eps
 
-# TODO Add kwargs to draw that pass to Polygon to allow for more complex rendering ie colors for materials
 
 # Abstact bases
 
@@ -87,13 +86,13 @@ class CompositeObject(OpticalElement):
 
 
 # Cyclindrical Objects
-class Cylidrical(OpticalElement):
+class Cylindrical(OpticalElement):
 
-    """docstring for Cylidrical"""
+    """ABC for Cylindrical geometry"""
 
     def __init__(self, centre, L, r, draw_kwargs = {}):
         default = {'closed':True, 'facecolor':'none'}
-        super(Cylidrical, self).__init__(centre, {k:v for k,v in default.items()+draw_kwargs.items()})
+        super(Cylindrical, self).__init__(centre, {k:v for k,v in default.items()+draw_kwargs.items()})
         self.L = isVector(L)
         if L[2] != 0:
             raise Exception("Only cylinders in the xy plane are currently supported :(")
@@ -105,7 +104,7 @@ class Cylidrical(OpticalElement):
                        self.centre - self.L + self.r * self.R]
 
     def draw(self, ax=None):
-        ax = super(Cylidrical, self).draw(ax)
+        ax = super(Cylindrical, self).draw(ax)
         poly = self.polygon([x[:2] for x in [self.points[0], self.points[3]]])
         ax.add_patch(poly)
         
@@ -145,9 +144,15 @@ class Cylidrical(OpticalElement):
             return float('inf')
 
 
-class CylindricalRefraction(Cylidrical, RefractionMixin):
+class CylindricalRefraction(Cylindrical, RefractionMixin):
 
-    """docstring for CylindricalRefraction"""
+    """Refracting cylinder.
+    
+        Params:
+        centre -  Centre of the object
+        L - Vector defining the axis and length of the cyinder
+        r - Scalar radius
+        n1,n2 (wl) -  Internal and external refractive index functions"""
 
     def __init__(self, centre, L, r, n1, n2, draw_kwargs={}):
         super(CylindricalRefraction, self).__init__(centre, L, r, draw_kwargs)
@@ -164,10 +169,15 @@ class CylindricalRefraction(Cylidrical, RefractionMixin):
         return self._refract(ray, n)
 
 
-class CylindricalWall(Cylidrical, AbsorptionMixin):
+class CylindricalWall(Cylindrical, AbsorptionMixin):
 
-    """docstring for CylindricalWall"""
-
+    """Absorbing cylinder.
+    
+        Params:
+        centre -  Centre of the object
+        L - Vector defining the axis and length of the cyinder
+        r - Scalar radius"""
+        
     def __init__(self, centre, L, r, draw_kwargs={}):
         super(CylindricalWall, self).__init__(centre, L, r, draw_kwargs)
 
@@ -178,7 +188,7 @@ class CylindricalWall(Cylidrical, AbsorptionMixin):
 # Spherical Objects
 class Spherical(OpticalElement):
 
-    """docstring for Spherical"""
+    """ABC for Spherical geometry. Sphericals are like umbrellas, the parameter R defines the stick of the umbrella!"""
 
     def __init__(self, centre, R, theta=None, height=None, draw_kwargs={}):
         super(Spherical, self).__init__(centre, draw_kwargs)
@@ -247,7 +257,8 @@ class Spherical(OpticalElement):
             return float('inf')
 
     def isIntersect(self, p):
-        """docstring for isIntersect"""
+        """Decides if a ray that would interest a complete sphere of this
+           size will intersect this section"""
 
         ang = np.arccos(np.dot(p, self.R) / np.linalg.norm(p))
         z_cond = np.abs(p[2]) <= self.height
@@ -256,7 +267,14 @@ class Spherical(OpticalElement):
 
 class SphericalWall(Spherical, AbsorptionMixin):
 
-    """A spherical with total absorption"""
+    """A spherical with total absorption.
+    
+       Params:
+       centre - Centre of the object
+       R - Radius vector
+       theta -  Half angular size of the spherical object (0,pi)
+       height - Height of the object (0,|r|)
+       Exactly one of height and theta can be specified."""
 
     def __init__(self, centre,  R, theta=None, height=None, draw_kwargs={}):
         super(SphericalWall, self).__init__(centre, R, theta, height, draw_kwargs)
@@ -267,13 +285,19 @@ class SphericalWall(Spherical, AbsorptionMixin):
 
 class SphericalMirror(Spherical, ReflectionMixin):
 
-    """A totally reflective spherical (both sides)"""
+    """A totally reflective spherical (both sides)
+    
+        Params:
+        centre - Centre of the object
+        R - Radius vector
+        theta -  Half angular size of the spherical object (0,pi)
+        height - Height of the object (0,|r|)
+        Exactly one of height and theta can be specified."""
 
     def __init__(self, centre,  R, theta=None, height=None, draw_kwargs={}):
         super(SphericalMirror, self).__init__(centre, R, theta, height, draw_kwargs)
 
     def propagate_ray(self, ray):
-        """Implements propagate_ray for Wall by terminating ray"""
 
         d = self.distance(ray)
         p = ray.p + d * ray.k
@@ -286,7 +310,16 @@ class SphericalMirror(Spherical, ReflectionMixin):
 
 class SphericalRefraction(Spherical, RefractionMixin):
 
-    """A spherical with medium on one side and with air on the other"""
+    """A refracting spherical surface
+        Params:
+        centre - Centre of the object
+        R - Radius vector
+        theta -  Half angular size of the spherical object (0,pi)
+        height - Height of the object (0,|r|)
+        Exactly one of height and theta can be specified.
+        n1,n2 (wl) -  Internal and external refractive index functions
+        
+    """
 
     def __init__(self, centre,  R, n1, n2, theta=None, height=None, draw_kwargs={}):
         super(SphericalRefraction, self).__init__(centre, R, theta, height, draw_kwargs)
@@ -294,15 +327,18 @@ class SphericalRefraction(Spherical, RefractionMixin):
         self.n2 = n2
 
     def propagate_ray(self, ray):
-        """Implements propagate_ray for SphericalRefraction by calculating the
-            refracted wave vector using the formula from wikipedia"""
-
         d = self.distance(ray)
         n = normalise(ray.p + d * ray.k - self.centre)
-        # print n
         return self._refract(ray, n)
 
-
+def Sphere(centre, r, n):
+    """Solid sphere object, wrapper of SphericalRefraction with theta=pi
+        Params:
+        centre - Centre of the object
+        r - scalar radius
+        n - Refractive index functions
+        """
+    return SphericalRefraction(centre, [r,0,0], air, n, theta=np.pi)
 # Planar Objects
 class Plane(OpticalElement):
 
@@ -405,7 +441,12 @@ class Wall(Plane, AbsorptionMixin):
 
 class Cube(CompositeObject):
 
-    """docstring for Cube"""
+    """Solid cube of refractive material
+        
+        Params:
+        centre -  Centre of the object
+        a,b,c - orthogonal set defining the axis of the cube, side lengths are 2a, 2b, 2c
+        ref_index - refractive index function"""
 
     def __init__(self, centre,  a, b, c, ref_index, draw_kwargs={}):
         super(Cube, self).__init__(centre, draw_kwargs)
@@ -476,7 +517,10 @@ class Screen(Plane):
 
 class Mask(Plane):
 
-    """"""
+    """
+    Basically a plane with a whole in to create shaped beams. The parameter mask should be the
+    file path of a dumped numpy array of which defines a bitmap of the mask. I've only provided letterA.npy, which is
+    shaped like an 'A' """
 
     def __init__(self, centre,  a, b, mask, draw_kwargs={}):
         super(Mask, self).__init__(centre,  a, b, draw_kwargs)

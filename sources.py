@@ -149,7 +149,7 @@ class ConicalSource(Source):
         
 class Ray(object):
 
-    """Ray object"""
+    """Ray object, access is through subclasses of Source"""
 
     def __init__(self, p, k, wavelength):
         super(Ray, self).__init__()
